@@ -1,0 +1,56 @@
+# PlatformIO and build artifacts
+.pio
+.pioenvs
+.piolibdeps
+.pio/build
+.pio/libdeps
+.pio/.cache
+*.pio
+*.piopm
+
+# Local Python environment for project tooling
+.venv/
+venv/
+
+# Generated PlatformIO / ESP-IDF files
+CMakeLists.txt
+sdkconfig*
+compile_commands.json
+managed_components/
+
+# ESP32 build output
+*.elf
+*.bin
+*.hex
+*.uf2
+*.map
+*.a
+*.o
+*.d
+
+# Generated build directories
+build/
+cmake-build-*/
+Debug/
+Release/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependency file caches
+sdkconfig.old
+sdkconfig
+managed_components/
+dependencies.lock
+
+# Logs and diagnostics
+*.log
+*.tmp

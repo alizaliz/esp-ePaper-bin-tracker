@@ -1,2 +1,29 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Normalize text files and keep consistent line endings across platforms
+* text=auto eol=lf
+
+# Shell scripts should remain Unix-friendly
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Firmware images and binary assets are not text
+*.bin binary
+*.elf binary
+*.hex binary
+*.uf2 binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.bmp binary
+*.tiff binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.xz binary
+*.tar binary
+
+# Preserve binary media and fonts if added later
+*.mp3 binary
+*.wav binary
+*.ttf binary
