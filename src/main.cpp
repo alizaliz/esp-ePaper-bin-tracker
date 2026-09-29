@@ -2,8 +2,7 @@
 #include <string>
 #include <vector>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "esp_sleep.h"
 
 #include "auckland_council_client.h"
 #include "collection_types.h"
@@ -13,6 +12,21 @@
 static void configure_wifi(void) {
   printf("Wi-Fi SSID: %s\n", WIFI_SSID);
   printf("Using stored address details and a resolved address ID from Auckland Council\n");
+}
+
+static void log_wakeup_cause(void) {
+  if (esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_TIMER)) {
+    printf("Woke from deep sleep (timer)\n");
+  } else {
+    printf("Cold boot or reset\n");
+  }
+}
+
+static void enter_deep_sleep(void) {
+  const uint64_t sleep_us = (uint64_t)REFRESH_INTERVAL_HOURS * 60ULL * 60ULL * 1000000ULL;
+  printf("Deep sleeping for %d hours\n", REFRESH_INTERVAL_HOURS);
+  esp_sleep_enable_timer_wakeup(sleep_us);
+  esp_deep_sleep_start();
 }
 
 static void refresh_collection_schedule(void) {
@@ -43,11 +57,16 @@ extern "C" void app_main(void) {
   printf("Official site: https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html\n");
   printf("Runtime flow: resolve address -> fetch collection data -> refresh ePaper display\n");
 
-  configure_wifi();
+  log_wakeup_cause();
 
-  while (1) {
-    refresh_collection_schedule();
-    printf("Waiting 7 days before checking again...\n");
-    vTaskDelay(pdMS_TO_TICKS(7UL * 24UL * 60UL * 60UL * 1000UL));
-  }
+  DisplayManager display;
+  display.init();
+
+  configure_wifi();
+  refresh_collection_schedule();
+
+  // The ePaper panel keeps its image without power, so put it into its own
+  // deep sleep before the ESP32-C6 powers down.
+  display.sleep();
+  enter_deep_sleep();
 }

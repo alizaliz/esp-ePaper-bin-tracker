@@ -10,4 +10,5 @@ class DisplayManager {
   void init();
   void showCollectionDays(const std::vector<CollectionDay>& days);
   void showAddressSummary(const AddressDetails& details);
+  void sleep();
 };

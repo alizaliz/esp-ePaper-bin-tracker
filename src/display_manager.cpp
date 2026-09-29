@@ -19,3 +19,7 @@ void DisplayManager::showAddressSummary(const AddressDetails& details) {
   std::cout << "Address: " << details.displayAddress << "\n";
   std::cout << "Address ID: " << details.addressId << "\n";
 }
+
+void DisplayManager::sleep() {
+  std::cout << "Display entering deep sleep\n";
+}
