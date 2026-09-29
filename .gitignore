@@ -16,6 +16,7 @@ venv/
 sdkconfig*
 !sdkconfig.defaults
 compile_commands.json
+# ESP-IDF components downloaded from src/idf_component.yml (versions pinned in dependencies.lock)
 managed_components/
 
 # ESP32 build output
@@ -44,9 +45,6 @@ Release/
 # OS files
 .DS_Store
 Thumbs.db
-
-# Dependency file caches
-dependencies.lock
 
 # Logs and diagnostics
 *.log

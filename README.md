@@ -43,7 +43,9 @@ Two things about power control matter for this project:
 PlatformIO reports RAM as 320KB. That is the usable figure in the generic board definition, not the chip's 512KB total, and it only affects the size report.
 
 ## Development environment
-The project uses PlatformIO with the Espressif32 platform and the **ESP-IDF** framework. It does not use Arduino, so Arduino libraries such as GxEPD2 or Adafruit GFX will not compile here. The display driver has to be written against ESP-IDF APIs.
+The project uses PlatformIO with the Espressif32 platform and the **ESP-IDF** framework. It does not use Arduino, so Arduino libraries such as GxEPD2 or Adafruit GFX will not compile here.
+
+The one external dependency, [LVGL](https://lvgl.io) 9 (graphics), is an ESP-IDF component declared in `src/idf_component.yml`. The build downloads it into `managed_components/` (git-ignored), and `dependencies.lock` pins the exact version, so commit that file.
 
 ### Prerequisites
 - Python 3.10+
@@ -61,13 +63,36 @@ The project uses PlatformIO with the Espressif32 platform and the **ESP-IDF** fr
 
 `src/config.h` is git-ignored so your credentials are never committed. If you add a new setting, add it to `src/config.example.h` as well.
 
+If the first build after a clean, or after deleting `sdkconfig.esp32-c6-devkitc-1`, fails with `Failed to resolve component 'lvgl__lvgl'`, run `pio run` again. It is a one-off ordering issue while PlatformIO sets up the component manager.
+
+## Display and graphics
+Screens are laid out with LVGL. `DisplayManager` renders the whole 200 × 200 screen once in 8-bit greyscale, converts it to the panel's 1-bit format, and sends it to the panel in a single full refresh. The panel driver (`src/epd_ssd1681.*`) is a small ESP-IDF driver based on Waveshare's examples. It uses the panel's built-in full-refresh waveform, since the display only updates once per wake.
+
+**Text.** LVGL's Montserrat fonts are compiled into the firmware as bitmap arrays. Sizes 14, 16 and 20 are enabled in `sdkconfig.defaults` (`CONFIG_LV_FONT_MONTSERRAT_<size>=y`). Add sizes there as needed. For a different typeface, generate a C font file with the [LVGL font converter](https://lvgl.io/tools/fontconverter) and add it to `src/`.
+
+**Images.** PNG files are embedded directly, with no conversion step:
+1. Put the PNG in `src/assets/`.
+2. Add its path to `board_build.embed_files` in `platformio.ini`.
+3. Declare it in `src/assets.h` with `ASSET_PNG(my_icon_png)` (the file name with `.` replaced by `_`).
+4. Draw it: `static lv_image_dsc_t icon = assetImage(my_icon_png_start, my_icon_png_end);` then `lv_image_set_src(img, &icon);`
+
+LVGL's PNG decoder unpacks the image to 32-bit colour in RAM while drawing, so keep embedded PNGs icon-sized. A full-screen 200 × 200 image needs about 160KB. For large images, convert them to a C array in LVGL's `L8` or `I1` format with the [LVGL image converter](https://lvgl.io/tools/imageconverter) instead.
+
+**Black and white conversion.** The panel shows only black and white. `DISPLAY_DITHERING` in `src/config.h` controls how greyscale becomes 1-bit:
+- `0` (default): a plain threshold. It keeps text and line icons crisp; greys become black or white.
+- `1`: Floyd–Steinberg dithering. Photos and gradients show as shading, but text edges get slightly speckled.
+
+For the sharpest results with either setting, design icons in pure black and white.
+
 ## Power and deep sleep
 The firmware does one pass each time the device wakes, then goes back to sleep:
 
 1. Wake (cold boot or deep sleep timer)
 2. Connect to Wi-Fi and fetch the collection schedule
-3. Redraw the e-Paper display
-4. Put the display into its own sleep mode, then put the ESP32-C6 into deep sleep for `REFRESH_INTERVAL_HOURS` (24 by default)
+3. Power the panel on (TCA9554 EXIO0), redraw it, put it into its own deep sleep, and power it off again. If the fetch failed, the panel is left alone so the last good schedule stays on screen.
+4. Put the ESP32-C6 into deep sleep for `REFRESH_INTERVAL_HOURS` (24 by default)
+
+The battery power hold (TCA9554 EXIO5) is driven high on every wake. The expander's registers are written directly and never reset, because the expander stays powered through deep sleep. A reset would briefly release the hold pin and could cut power on battery.
 
 The e-Paper panel keeps its image with no power, so the schedule stays visible while the device sleeps. Each wake starts from `app_main` like a fresh boot. Anything that must survive a sleep, such as the resolved address ID, has to be stored in NVS or RTC memory.
 
@@ -93,19 +118,24 @@ Runtime flow:
 | --- | --- |
 | `src/main.cpp` | Wake, refresh and deep sleep cycle |
 | `src/auckland_council_client.*` | Address lookup and collection-day fetch |
-| `src/display_manager.*` | e-Paper rendering and display sleep |
+| `src/display_manager.*` | LVGL screen layout and greyscale to 1-bit conversion |
+| `src/epd_ssd1681.*` | e-Paper panel driver (SPI) |
+| `src/board_power.*` | I2C bus and TCA9554 power switching (panel power, battery hold) |
+| `src/board_pins.h` | Board pin map |
+| `src/assets.h`, `src/assets/` | Embedded PNG images |
+| `src/idf_component.yml` | ESP-IDF component dependencies (LVGL) |
 | `src/collection_types.h` | Shared data types |
 | `src/config.example.h` | Template for the git-ignored `src/config.h` |
-| `sdkconfig.defaults` | ESP-IDF settings, such as the 16MB flash size. PlatformIO generates `sdkconfig.<env>` from this file. |
+| `sdkconfig.defaults` | ESP-IDF and LVGL settings, such as the 16MB flash size and enabled fonts. PlatformIO generates `sdkconfig.<env>` from this file. |
+| `partitions.csv` | Flash layout: a 4MB app partition, leaving the rest of the 16MB free for OTA or storage later |
 
 To change an ESP-IDF setting permanently, add it to `sdkconfig.defaults`. The generated `sdkconfig.*` files are git-ignored.
 
 ## Status
-Working: the build, the 16MB flash configuration, and the deep sleep cycle.
+Implemented: the build, the 16MB flash and partition layout, the deep sleep cycle, panel power and the battery hold, the e-Paper driver, and LVGL rendering with fonts and embedded PNGs. The display code builds but has not yet been tested on hardware.
 
 Still placeholders:
 - Wi-Fi connection
-- HTTPS calls to the Council APIs, and JSON parsing
+- HTTPS calls to the Council APIs, and JSON parsing (the schedule shown is sample data)
 - Caching the address ID in NVS
-- The e-Paper driver, including switching on TCA9554 EXIO0 (the display currently logs to serial)
-- Battery power hold (EXIO5) and battery voltage reading
+- Battery voltage reading

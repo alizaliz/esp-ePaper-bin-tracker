@@ -1,2 +1,15 @@
 # Project-wide ESP-IDF defaults. PlatformIO generates sdkconfig.<env> from this file.
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# LVGL: render in 8-bit greyscale; display_manager converts to 1-bit for the panel.
+CONFIG_LV_COLOR_DEPTH_8=y
+# Use the system heap so decoded PNGs aren't limited by LVGL's own memory pool.
+CONFIG_LV_USE_CLIB_MALLOC=y
+# PNG decoder for images embedded from src/assets/.
+CONFIG_LV_USE_LODEPNG=y
+# Built-in fonts (compiled in as bitmap arrays). Enable more sizes as needed.
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_20=y

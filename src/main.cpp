@@ -5,6 +5,7 @@
 #include "esp_sleep.h"
 
 #include "auckland_council_client.h"
+#include "board_power.h"
 #include "collection_types.h"
 #include "config.h"
 #include "display_manager.h"
@@ -29,7 +30,7 @@ static void enter_deep_sleep(void) {
   esp_deep_sleep_start();
 }
 
-static void refresh_collection_schedule(void) {
+static void refresh_collection_schedule(DisplayManager& display) {
   AddressDetails details;
   std::vector<CollectionDay> days;
 
@@ -50,6 +51,12 @@ static void refresh_collection_schedule(void) {
   for (const auto& day : days) {
     printf("- %s: %s\n", day.type.c_str(), day.date.c_str());
   }
+
+  // Only redraw on success, so a failed fetch leaves the last good schedule
+  // on screen.
+  if (display.showCollectionDays(details, days) != ESP_OK) {
+    printf("Failed to update the display\n");
+  }
 }
 
 extern "C" void app_main(void) {
@@ -59,14 +66,16 @@ extern "C" void app_main(void) {
 
   log_wakeup_cause();
 
-  DisplayManager display;
-  display.init();
+  // Latch the battery power hold first, so the board stays on when running
+  // from battery even if nothing else below succeeds.
+  if (board_power::init() != ESP_OK) {
+    printf("Board power init failed\n");
+  }
 
   configure_wifi();
-  refresh_collection_schedule();
 
-  // The ePaper panel keeps its image without power, so put it into its own
-  // deep sleep before the ESP32-C6 powers down.
-  display.sleep();
+  DisplayManager display;
+  refresh_collection_schedule(display);
+
   enter_deep_sleep();
 }
