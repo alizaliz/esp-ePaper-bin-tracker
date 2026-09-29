@@ -20,3 +20,7 @@
 // How long the device deep sleeps between schedule refreshes. Daily keeps the
 // "next collection" dates current without costing much battery.
 #define REFRESH_INTERVAL_HOURS 24
+
+// 0: convert the screen to black and white with a plain threshold (crisp text).
+// 1: use Floyd-Steinberg dithering so greyscale images show as shading.
+#define DISPLAY_DITHERING 0
