@@ -1,0 +1,2 @@
+# Project-wide ESP-IDF defaults. PlatformIO generates sdkconfig.<env> from this file.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
