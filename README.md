@@ -207,7 +207,7 @@ To change an ESP-IDF setting permanently, add it to `sdkconfig.defaults`. The ge
 ## Status
 Working and tested on hardware: Wi-Fi, NTP clock sync, the Council schedule fetch, Open-Meteo weather with the sensor fallback, the bin screen layout, deep sleep, panel power and the battery hold, and staying awake on USB.
 
-Also tested on hardware: retrying after a failed fetch (with an invalid address ID) and the 90 second time limit (temporarily cut to 5 seconds). Not yet tested on hardware: the 00:05 and bin night wakes and the `TONIGHT` and `TODAY` screens, which depend on the date. The bin night date maths was checked on a computer across month, year and daylight saving boundaries.
+Also tested on hardware: retrying after a failed fetch (with an invalid address ID), the 90 second time limit (temporarily cut to 5 seconds), the daily average weather, loading the schedule from flash after a reset with no Wi-Fi, and the out of date screen (with the 48 hour limit temporarily cut to 1 second). Not yet tested on hardware: the 00:05 and bin night wakes and the `TONIGHT` and `TODAY` screens, which depend on the date. The bin night date maths was checked on a computer across month, year and daylight saving boundaries.
 
 Also tested on hardware: the battery reading, the low battery LED blink (by temporarily raising the threshold), and the PWR button restart, both while awake and from deep sleep. Not yet tested: a real low battery over several 10-minute wakes.
 
