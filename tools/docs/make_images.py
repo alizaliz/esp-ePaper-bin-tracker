@@ -19,7 +19,7 @@ PREVIEWS = ["upcoming", "tonight", "today", "stale", "low_battery", "offline"]
 
 SCALE = 2                 # preview PNGs are rendered at 2x
 SCREEN_X, SCREEN_Y = 280, 130  # where the screen sits in the diagram
-HEIGHT = 860
+HEIGHT = 990
 
 
 def at(x, y):
@@ -39,8 +39,12 @@ def leader(x1, y1, x2, y2):
             f'<circle cx="{x2}" cy="{y2}" r="4" class="d"/>')
 
 
+def png_data(name):
+    return base64.b64encode((PREVIEW / f"{name}.png").read_bytes()).decode()
+
+
 def build_diagram():
-    png = base64.b64encode((PREVIEW / "upcoming.png").read_bytes()).decode()
+    png = png_data("upcoming")
     parts = []
 
     # Device: bezel and the rendered screen
@@ -82,9 +86,28 @@ def build_diagram():
     for cx, name in [(33.5, "Rubbish"), (99.5, "Recycling"), (165.5, "Food scraps")]:
         parts.append(label(at(cx, 0)[0], SCREEN_Y + 446, name, "", "middle"))
 
+    # Out of date: the bottom strip cropped from the stale preview (screen
+    # rows 140-193), at the same scale as the screen above
+    strip_top, strip_h = 140, 54
+    inset = SCREEN_Y + 476
+    parts.append(f'<rect x="{SCREEN_X - 24}" y="{inset - 14}" width="448" '
+                 f'height="{strip_h * SCALE + 28}" rx="14" class="bezel"/>')
+    parts.append(f'<svg x="{SCREEN_X}" y="{inset}" width="400" height="{strip_h * SCALE}" '
+                 f'viewBox="0 {strip_top * SCALE} 400 {strip_h * SCALE}">'
+                 f'<image width="400" height="400" href="data:image/png;base64,{png_data("stale")}"/>'
+                 f'</svg>')
+    icon_x = SCREEN_X + 30 * SCALE
+    icon_y = inset + (167 - strip_top) * SCALE
+    parts.append(leader(240, icon_y, icon_x - 6, icon_y))
+    parts.append(label(232, icon_y - 12, "Out of date", "pickup day passed, or last", "end"))
+    parts.append(f'<text x="232" y="{icon_y + 22}" text-anchor="end" class="s">'
+                 f'fetch more than 48 h ago</text>')
+    parts.append(label(728, icon_y - 12, "Replaces the pickup day", "TODAY and TONIGHT"))
+    parts.append(f'<text x="728" y="{icon_y + 22}" class="s">aren\'t shown</text>')
+
     # Board controls panel. Shows what each part does; the drawings aren't
     # placed where the parts sit on the board.
-    panel = SCREEN_Y + 508
+    panel = inset + strip_h * SCALE + 66
     parts.append(f'<text x="40" y="{panel}" class="h">On the board</text>')
     parts.append(f'<line x1="40" y1="{panel + 12}" x2="920" y2="{panel + 12}" class="rule"/>')
     items = [
