@@ -46,6 +46,9 @@ static const int MAX_AWAKE_S = 90;
 
 static const int LED_BLINK_DURATION_S = 10;
 
+// A schedule older than this is shown as possibly out of date.
+static const int STALE_AFTER_S = 48 * 60 * 60;
+
 // While the battery is low, wake this often to blink the LED.
 static const int LOW_BATTERY_BLINK_INTERVAL_S = 10 * 60;
 
@@ -74,6 +77,9 @@ static const char* SCHEDULE_KEY = "schedule_v1";
 RTC_DATA_ATTR static time_t next_refresh = 0;
 RTC_DATA_ATTR static bool battery_low = false;
 RTC_DATA_ATTR static int failed_refreshes = 0;
+// Set after a successful fetch. RTC memory is cleared by power loss, so this
+// is false until the first fetch after power returns.
+RTC_DATA_ATTR static bool fetched_since_power_on = false;
 
 static esp_timer_handle_t awake_cap_timer = nullptr;
 
@@ -351,6 +357,20 @@ static bool fetch_schedule(Schedule& schedule) {
   return true;
 }
 
+// Whether the schedule shown may be out of date: the pickup day has passed,
+// or the last successful fetch was more than STALE_AFTER_S ago. Without a set
+// clock neither can be checked, so it counts as stale unless it was fetched
+// since power on.
+static bool schedule_is_stale(void) {
+  if (!last_schedule.valid) return false;
+  if (!clock_is_set()) return !fetched_since_power_on;
+  if (last_schedule.pickup < local_today()) return true;
+  // A fetch made before the clock was set has no usable timestamp; rely on
+  // the pickup date check above.
+  const time_t fetched = last_schedule.fetchedAt;
+  return fetched > 1735689600 && time(nullptr) - fetched > STALE_AFTER_S;
+}
+
 // Redraws the screen. Returns true if it shows the bin night reminder.
 static bool refresh_display(bool online, const Climate& climate, int battery_pct) {
   if (!last_schedule.valid) {
@@ -360,8 +380,11 @@ static bool refresh_display(bool online, const Climate& climate, int battery_pct
 
   BinScreenData data;
   data.pickup = last_schedule.pickup;
-  data.isToday = clock_is_set() && local_today() == last_schedule.pickup;
-  data.isTonight = !data.isToday && is_bin_night();
+  // TODAY and TONIGHT can't be trusted from out-of-date data.
+  data.isStale = schedule_is_stale();
+  data.isToday = !data.isStale && clock_is_set() && local_today() == last_schedule.pickup;
+  data.isTonight = !data.isStale && !data.isToday && is_bin_night();
+  if (data.isStale) printf("Schedule may be out of date\n");
   data.rubbish = last_schedule.rubbish;
   data.recycling = last_schedule.recycling;
   data.foodScraps = last_schedule.foodScraps;
@@ -399,6 +422,7 @@ static bool full_refresh(int battery_pct) {
     if (fetched) {
       schedule.fetchedAt = time(nullptr);
       last_schedule = schedule;
+      fetched_since_power_on = true;
       if (storage::save(SCHEDULE_KEY, &last_schedule, sizeof(last_schedule)) != ESP_OK) {
         printf("Failed to save the schedule to flash\n");
       }

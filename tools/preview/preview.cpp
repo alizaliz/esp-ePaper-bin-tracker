@@ -131,6 +131,15 @@ int main(int argc, char** argv) {
   widest.batteryPct = 100;
   render(display, widest, out + "/widest.png");
 
+  BinScreenData stale = upcoming;  // schedule out of date
+  stale.isStale = true;
+  stale.wifiConnected = false;
+  render(display, stale, out + "/stale.png");
+
+  BinScreenData stale_widest = widest;
+  stale_widest.isStale = true;
+  render(display, stale_widest, out + "/stale_widest.png");
+
   BinScreenData low = upcoming;  // low battery
   low.batteryPct = 8;
   render(display, low, out + "/low_battery.png");

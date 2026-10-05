@@ -144,7 +144,21 @@ void addPickupDay(lv_obj_t* screen, const BinScreenData& data) {
   lv_obj_align(banner, LV_ALIGN_BOTTOM_MID, 0, -BANNER_BOTTOM_GAP);
 
   lv_obj_t* label;
-  if (data.isToday || data.isTonight) {
+  if (data.isStale) {
+    // Out of date: the last known day next to a "history" icon, in the
+    // smaller font so both fit
+    char text[12];
+    snprintf(text, sizeof(text), "%s %d", DAYS[dayOfWeek(data.pickup)], data.pickup.day);
+    lv_obj_t* row = lv_obj_create(banner);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row, 10, 0);
+    addLabel(row, ICON_STALE, &icons_30);
+    addLabel(row, text, &font_bold_32);
+    label = row;
+  } else if (data.isToday || data.isTonight) {
     // Evening before (put the bins out) or the pickup day itself: white text
     // on a solid black strip
     lv_obj_set_style_bg_color(banner, lv_color_black(), 0);

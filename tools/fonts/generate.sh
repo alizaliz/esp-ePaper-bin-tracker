@@ -28,8 +28,9 @@ conv() {
 conv --font "$MONTSERRAT" --size 40 --symbols "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 " \
   --lv-font-name font_bold_40 -o "$OUT/font_bold_40.c"
 
-# "TODAY" and "TONIGHT" banners (TONIGHT is too wide for the 40px size)
-conv --font "$MONTSERRAT" --size 32 --symbols "ADGHINOTY" \
+# "TODAY" and "TONIGHT" banners (TONIGHT is too wide for the 40px size),
+# and the pickup day next to the stale data icon
+conv --font "$MONTSERRAT" --size 32 --symbols "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 " \
   --lv-font-name font_bold_32 -o "$OUT/font_bold_32.c"
 
 # Temperature and humidity readings
@@ -43,5 +44,9 @@ conv --font "$FA" --size 60 --range 0xF2ED,0xF1B8,0xF5D1 \
 # Top row icons: wifi, temperature-half, droplet
 conv --font "$FA" --size 22 --range 0xF1EB,0xF2C9,0xF043 \
   --lv-font-name icons_22 -o "$OUT/icons_22.c"
+
+# Stale data icon: clock-rotate-left
+conv --font "$FA" --size 30 --range 0xF1DA \
+  --lv-font-name icons_30 -o "$OUT/icons_30.c"
 
 echo "Fonts written to $OUT/"
