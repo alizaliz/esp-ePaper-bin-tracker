@@ -1,43 +1,44 @@
 #include "auckland_council_client.h"
 
-#include <cstdio>
-#include <cstring>
-#include <string>
-#include <vector>
+#include "esp_log.h"
+
+#include "council_parser.h"
+#include "https_client.h"
 
 namespace auckland_council {
+namespace {
 
-bool resolveAddress(const std::string& query, AddressDetails& details) {
-  // This is a placeholder implementation: the real device should call the official
-  // Auckland Council API directly over HTTPS, parse the returned JSON, and store
-  // the resolved address data once per install.
-  // Example endpoint:
-  //   GET https://www.aucklandcouncil.govt.nz/api/address/search?query=500+Queen+Street
+constexpr const char* TAG = "council";
+constexpr const char* PAGE_URL =
+    "https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/"
+    "rubbish-recycling-collection-days/";
 
-  (void)query;
+// The page is about 2.7MB, but the dates are in the first ~16KB. Read until
+// they've arrived, with a cap in case the layout changes.
+constexpr size_t MAX_BYTES = 96 * 1024;
 
-  details.displayAddress = "500 Queen Street, Auckland Central";
-  details.addressId = "12342478585";
-  details.unit = "";
-  details.street = "Queen Street";
-  details.suburb = "Auckland Central";
+}  // namespace
 
-  return !details.addressId.empty();
-}
+bool fetchCollectionDays(const std::string& address_id, int reference_year,
+                         std::vector<CollectionDay>& days) {
+  const std::string url = PAGE_URL + address_id + ".html";
+  std::string html;
+  html.reserve(24 * 1024);
 
-bool fetchCollectionDays(const std::string& addressId, std::vector<CollectionDay>& days) {
-  // This placeholder maps the expected data structure for a weekly display update.
-  // Example endpoint:
-  //   GET https://www.aucklandcouncil.govt.nz/api/kerbside?address=12342478585
-
-  (void)addressId;
-
-  days.clear();
-  days.push_back({"Rubbish", "Rubbish", "Thursday, 24 September"});
-  days.push_back({"Food scraps", "Food scraps", "Thursday, 24 September"});
-  days.push_back({"Recycling", "Recycling", "Thursday, 24 September"});
-
-  return !days.empty();
+  const esp_err_t err = https::get(url.c_str(), MAX_BYTES, [&](const char* data, size_t len) {
+    html.append(data, len);
+    return !council_parser::hasNextDates(html);
+  });
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "fetch failed: %s", esp_err_to_name(err));
+    return false;
+  }
+  if (!council_parser::parseNextDates(html, reference_year, days)) {
+    ESP_LOGW(TAG, "collection dates not found in the first %u bytes of the page",
+             (unsigned)html.size());
+    return false;
+  }
+  return true;
 }
 
 }  // namespace auckland_council

@@ -52,3 +52,6 @@ Thumbs.db
 
 # Local device configuration (Wi-Fi credentials, address)
 src/config.h
+tools/fonts/.cache/
+tools/preview/build/
+tools/preview/out/

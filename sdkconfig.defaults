@@ -13,3 +13,7 @@ CONFIG_LV_USE_LODEPNG=y
 CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_16=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
+
+# LVGL rendering and PNG decoding run in app_main and need more than the
+# default ~4KB main task stack.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384

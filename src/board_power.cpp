@@ -74,4 +74,6 @@ esp_err_t setEpdPower(bool on) {
   return setOutput(EXIO_EPD_POWER, on);
 }
 
+i2c_master_bus_handle_t i2cBus() { return bus; }
+
 }  // namespace board_power
