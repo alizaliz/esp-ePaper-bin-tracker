@@ -1,218 +1,218 @@
 # esp-ePaper-bin-tracker
 
-Battery-powered firmware for the Waveshare ESP32-C6 1.54" e-Paper development board. It shows the next Auckland Council rubbish, food scraps and recycling collection days.
+A battery-powered e-paper display that shows your next Auckland Council rubbish, recycling and food scraps collection. It runs on the [Waveshare ESP32-C6 1.54" e-Paper board](https://www.waveshare.com/esp32-c6-epaper-1.54.htm), wakes once a day to fetch the schedule, and sleeps the rest of the time.
 
 ![Labelled diagram of the screen and the board's controls](docs/images/diagram.svg)
 
-## Hardware
-[Waveshare ESP32-C6 1.54" e-Paper AIoT Development Board](https://www.waveshare.com/esp32-c6-epaper-1.54.htm) ([docs](https://docs.waveshare.com/ESP32-C6-ePaper-1.54), [examples and schematic](https://github.com/waveshareteam/ESP32-C6-ePaper-1.54))
+- Shows which bins go out on the next pickup day, and when it is
+- Reminds you the evening before (`TONIGHT`) and on the day (`TODAY`)
+- Today's average temperature and humidity, Wi-Fi status and battery level
+- Keeps working through Wi-Fi outages, and flags the schedule if it may be out of date
+- Blinks the LED when the battery needs charging
 
-| Feature | Spec |
+## Setup
+
+### What you need
+- The Waveshare ESP32-C6 1.54" e-Paper board, and a USB-C data cable
+- Optional: a 3.7V lithium battery with an MX1.25 plug (it charges over USB-C)
+- A computer with Python 3.10 or later
+
+### 1. Install the tools
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install platformio
+```
+
+### 2. Configure
+```sh
+cp src/config.example.h src/config.h
+```
+Edit `src/config.h`. It's git-ignored, so your Wi-Fi password is never committed. These three settings are required:
+
+| Setting | What to put |
 | --- | --- |
-| MCU | ESP32-C6, 32-bit RISC-V up to 160MHz, 512KB HP SRAM + 16KB LP SRAM |
-| Flash | 16MB external NOR flash |
-| Display | 1.54" e-Paper V2, 200 × 200, black and white, SPI. Full refresh about 2s, partial refresh about 0.3s. SSD1681-style command set ([datasheet](https://files.waveshare.com/wiki/common/1.54inch_e-paper_V2_Datasheet.pdf)) |
-| Wireless | Wi-Fi 6, Bluetooth 5, IEEE 802.15.4 (Zigbee/Thread) |
-| USB | USB-C to the ESP32-C6's native USB-Serial-JTAG, used for flashing and logs |
-| Power | MX1.25 3.7V lithium battery header with onboard charging |
-| Buttons | BOOT (GPIO9) and PWR (GPIO2). There is no reset button. |
-| Also on board | PCF85063 RTC, SHTC3 temperature and humidity sensor, ES8311 audio codec with speaker and mic, TF card slot, TCA9554 I/O expander |
+| `WIFI_SSID`, `WIFI_PASSWORD` | Your Wi-Fi network. It must be 2.4GHz. |
+| `COUNCIL_ADDRESS_ID` | Your address's ID on the Council website. Search for your address on the [collection day page](https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html). The results page URL ends in `/<address ID>.html`. |
+| `WEATHER_LATITUDE`, `WEATHER_LONGITUDE` | Your location for the weather, in decimal degrees, e.g. `-36.85` and `174.76`. |
 
-### Pin map
-Taken from Waveshare's ESP-IDF examples (`epaper_config.h`):
+<details>
+<summary>Optional settings</summary>
 
-| Signal | Pin |
-| --- | --- |
-| e-Paper SPI (SPI2_HOST) | SCK GPIO6, MOSI GPIO5, CS GPIO7, DC GPIO15, RST GPIO11, BUSY GPIO10 |
-| I2C bus | SDA GPIO18, SCL GPIO8 |
-| TCA9554 expander (I2C 0x20) | EXIO0 e-Paper power, EXIO1 audio power, EXIO4 LED, EXIO5 battery power hold |
-| Battery voltage | GPIO0 (ADC1 channel 0), through a 1:2 divider |
-| TF card | shares SCK/MOSI with the display, MISO GPIO4, CS GPIO3 |
-| I2C devices | PCF85063 RTC at 0x51, SHTC3 at 0x70 |
-
-Two things about power control matter for this project:
-- The e-Paper panel is powered through **TCA9554 EXIO0**. The display driver has to bring up I2C and switch that pin on before the panel responds.
-- On battery, **EXIO5** holds the board's power on. Waveshare's examples drive it high at boot and drive it low to power the board off.
-
-### Build environment check
-| Item | Board | This project |
+| Setting | Default | What it does |
 | --- | --- | --- |
-| Target | ESP32-C6 | `board = esp32-c6-devkitc-1`, a generic ESP32-C6 definition |
-| Flash | 16MB | `board_upload.flash_size = 16MB` and `CONFIG_ESPTOOLPY_FLASHSIZE_16MB` in `sdkconfig.defaults` |
-| ESP-IDF | Waveshare requires v5.5.0 or later | PlatformIO `espressif32` 7.0.0 ships ESP-IDF 6.0.0 |
-| Upload and monitor | Native USB-Serial-JTAG | `pio run -t upload` and `pio device monitor` over USB-C |
+| `BIN_NIGHT_HOUR` | `18` | Hour (24h) on the evening before a pickup when `TONIGHT` appears |
+| `BIN_NIGHT_LED` | `1` | Blink the LED at the bin night reminder |
+| `LOW_BATTERY_PERCENT` | `10` | Charge below which the LED blinks as a reminder to charge |
+| `USE_ONLINE_WEATHER` | `1` | `0` shows the onboard sensor (indoor) instead of the online weather |
+| `TEMPERATURE_OFFSET_C` | `0.0f` | Correction added to the onboard sensor's temperature |
+| `DISPLAY_FLIP` | `1` | Rotate the screen so the USB-C end of the board is at the top |
+| `DISPLAY_DITHERING` | `0` | `1` shows greyscale images as dithered shading instead of a hard threshold |
+| `REFRESH_INTERVAL_HOURS` | `24` | Fallback wake interval while the clock hasn't been set |
+| `STAY_AWAKE_ON_USB` | `1` | Stay awake while connected to a computer, for flashing and logs |
 
-PlatformIO reports RAM as 320KB. That is the usable figure in the generic board definition, not the chip's 512KB total, and it only affects the size report.
+</details>
 
-## Development environment
-The project uses PlatformIO with the Espressif32 platform and the **ESP-IDF** framework. It does not use Arduino, so Arduino libraries such as GxEPD2 or Adafruit GFX will not compile here.
+### 3. Build and flash
+Plug the board in, then:
+```sh
+pio run -t upload      # build and flash
+pio device monitor     # watch the log (Ctrl+C to exit)
+```
+The first build downloads the ESP-IDF toolchain and LVGL, which takes a few minutes.
 
-The one external dependency, [LVGL](https://lvgl.io) 9 (graphics), is an ESP-IDF component declared in `src/idf_component.yml`. The build downloads it into `managed_components/` (git-ignored), and `dependencies.lock` pins the exact version, so commit that file.
+### 4. Check it's working
+Within about 15 seconds the screen redraws, and the log shows something like:
+```
+Weather (today's mean): 13.6 C, 73.0 %
+Next pickup 2026-10-08: rubbish 1, recycling 1, food scraps 1
+Next refresh at 2026-10-07 00:05
+Computer connected over USB: staying awake for flashing and logs.
+```
+While it's plugged into a computer, the board stays awake. Unplug it, or run it from a battery or USB charger, and it sleeps until the next refresh.
 
-### Prerequisites
-- Python 3.10+
-- PlatformIO Core (`pip install platformio`), installed in the project's `.venv` or globally
-- A USB-C data cable. The board uses the ESP32-C6's native USB, so no extra serial driver is needed.
+<details>
+<summary>Troubleshooting</summary>
 
-### Quick start
-1. Activate the virtual environment: `source .venv/bin/activate`
-2. Create your local config: `cp src/config.example.h src/config.h`
-3. Edit `src/config.h`: set your Wi-Fi SSID and password, your Council address ID (see [Auckland Council data source](#auckland-council-data-source)), and your latitude and longitude for the weather.
-4. Build, flash and monitor:
-   - `pio run`
-   - `pio run -t upload`
-   - `pio device monitor`
+| Problem | Fix |
+| --- | --- |
+| Upload can't find or connect to the board | The board is probably asleep, so its USB is off. Disconnect the battery, hold **BOOT** while unplugging and replugging USB-C, then upload again. |
+| `Failed to resolve component 'lvgl__lvgl'` | A one-off PlatformIO ordering issue on the first build after a clean. Run the build again. |
+| `no connection to "<SSID>"` | Check the Wi-Fi name and password, and that the network is 2.4GHz. |
+| `collection dates not found` | Check `COUNCIL_ADDRESS_ID`. If it's right, the Council website layout may have changed (see Data sources under [How it works](#how-it-works)). |
+| Screen shows `--` for temperature and humidity | Neither the online weather nor the onboard sensor could be read. |
 
-`src/config.h` is git-ignored so your credentials are never committed. If you add a new setting, add it to `src/config.example.h` as well.
+</details>
 
-If the first build after a clean, or after deleting `sdkconfig.esp32-c6-devkitc-1`, fails with `Failed to resolve component 'lvgl__lvgl'`, run `pio run` again. It is a one-off ordering issue while PlatformIO sets up the component manager.
+## How it works
 
-## Display and graphics
-
-### Screen layout
-| Upcoming pickup | Bin night | Pickup day |
+### The screen
+| Upcoming pickup | Evening before | Pickup day |
 | :---: | :---: | :---: |
 | ![Upcoming pickup](docs/images/screen_upcoming.png) | ![TONIGHT the evening before](docs/images/screen_tonight.png) | ![TODAY on the pickup day](docs/images/screen_today.png) |
-| Rubbish and food scraps go out on Thursday; recycling doesn't | Put all three bins out tonight | All three bins go out today |
+| Rubbish and food scraps go out Thursday; recycling doesn't | From 6pm the evening before | On the day |
 
 | Out of date | Low battery | Offline |
 | :---: | :---: | :---: |
 | ![Schedule out of date](docs/images/screen_stale.png) | ![Low battery](docs/images/screen_low_battery.png) | ![Offline, with no readings](docs/images/screen_offline.png) |
-| Last fetch too old, or the pickup day has passed | Battery almost empty; the green LED also blinks | No Wi-Fi and no sensor reading |
+| The schedule may be stale | The LED also blinks | No Wi-Fi and no readings |
 
-These are host previews, rendered by the same layout code and fonts as the firmware. On the device, the image is rotated 180° (`DISPLAY_FLIP`) so the USB-C and LED end of the board is at the top.
+- **Top row:** Wi-Fi status (slashed if this refresh couldn't get online), temperature, humidity and battery charge.
+- **Bins:** rubbish, recycling and food scraps. A bin with a slash through it isn't collected on the next pickup day.
+- **Bottom:** the next pickup day, e.g. `THU 8`. It becomes `TONIGHT` from 6pm the evening before, then `TODAY` on the day.
+- **Out of date:** a history icon next to the date means the schedule may be stale, so `TODAY` and `TONIGHT` are hidden. This happens when the pickup day has passed, the last successful fetch was over 48 hours ago, or the board lost power and couldn't get online.
 
-- **Top row, centred:** Wi-Fi status, temperature (°C), relative humidity (%) and battery charge.
-  - The Wi-Fi icon shows whether this refresh got online. A slash through it means the connection failed, so the schedule shown is the last one fetched.
-  - Temperature and humidity are today's average outdoor weather (daily mean, Auckland time) from [Open-Meteo](https://open-meteo.com) for `WEATHER_LATITUDE`/`WEATHER_LONGITUDE`. The board refreshes just after midnight, so a reading of the current conditions would show the overnight low all day. If Wi-Fi or the request fails, the onboard SHTC3 sensor (indoor) is used instead, and if that fails too it shows `--`. Set `USE_ONLINE_WEATHER` to `0` to always use the sensor.
-  - The sensor is read first thing on wake, before Wi-Fi and the display warm the board. If its readings run warm, set `TEMPERATURE_OFFSET_C`.
-  - The battery glyph's fill is proportional to the charge. It's updated with each redraw, so once a day.
-- **Middle:** three bin icons (rubbish, recycling, food scraps). A bin that isn't collected on the next pickup day has a slash through it.
-- **Bottom:** the next pickup day in bold, e.g. `THU 8`. From `BIN_NIGHT_HOUR` (18:00) the evening before, it shows `TONIGHT` as a reminder to put the bins out, and the green LED blinks for 10 seconds (`BIN_NIGHT_LED`). On the pickup day itself it shows `TODAY`. Both are in the same bold white text on a black strip.
-- **Out of date:** if the schedule may be stale, the bottom strip shows the last known pickup day next to a "history" icon (a clock with an arrow winding back), and `TODAY` and `TONIGHT` aren't shown. It counts as stale when the pickup day has already passed, or the last successful fetch was more than 48 hours ago. If the clock isn't set (after a power loss with no Wi-Fi), it counts as stale unless it was fetched since power on.
+Temperature and humidity are today's outdoor average from Open-Meteo. If that can't be fetched, the onboard sensor's indoor reading is used instead.
 
-`TODAY` needs the current date. The clock is set from NTP (`nz.pool.ntp.org`) on every wake that gets online, and keeps running through deep sleep in between.
+### Daily routine
+The board spends almost all its time in deep sleep. The e-paper screen keeps its image with no power, so the schedule stays visible.
 
-The layout is in `src/ui/bin_screen.cpp`. It is plain LVGL code, so it can be previewed on a computer (see below).
+| When | What happens |
+| --- | --- |
+| **00:05** every night | Full refresh: connect to Wi-Fi, set the clock, fetch the schedule and weather, redraw the screen, then sleep. Takes about 10 seconds. |
+| **18:00** the evening before a pickup | Full refresh showing `TONIGHT`, and a slow blink of the LED for 10 seconds |
+| After a failed refresh | Retry in an hour, up to three times, then return to the normal schedule |
+| Every 10 minutes, while the battery is low | Double-blink the LED for 10 seconds, then sleep again. No Wi-Fi or redraw. |
+| PWR press, power on or reset | Full refresh straight away |
 
-### Rendering
-Screens are laid out with LVGL. `DisplayManager` renders the whole 200 × 200 screen once in 8-bit greyscale, converts it to the panel's 1-bit format, and sends it to the panel in a single full refresh. The panel driver (`src/epd_ssd1681.*`) is a small ESP-IDF driver based on Waveshare's examples. It uses the panel's built-in full-refresh waveform, since the display only updates once per wake.
+Any wake that runs longer than 90 seconds, for example because of a hung network request, is cut short with a retry due in an hour.
 
-**Text and icons.** LVGL fonts are compiled into the firmware as bitmap arrays. The screen uses fonts generated by `tools/fonts/generate.sh` into `components/fonts/`:
-- Montserrat Bold for the pickup day and the readings. LVGL's built-in Montserrat has no bold weight and no `°` sign.
-- [Font Awesome Free](https://fontawesome.com) solid icons: bin, recycle, apple, Wi-Fi, thermometer, droplet and history (stale data). Icons drawn as font glyphs stay crisp in black and white at any size.
+### LED and buttons
+| | |
+| --- | --- |
+| **Green LED, slow blink** | Bin night: put the bins out |
+| **Green LED, double-blink** | Battery below 10%: charge it. Stops once it's back above 15%. |
+| **Red LED** | Charging. This is controlled by the board's charger, not the firmware. |
+| **PWR button** | Press to restart and refresh now. On battery, it also turns the board on. |
+| **BOOT button** | Hold while powering on to enter download mode for flashing |
 
-Each font only contains the characters the screen uses. To add characters, icons or sizes, edit `tools/fonts/generate.sh` and run it from the repo root; it needs Node.js. Add any new font to `components/fonts/CMakeLists.txt` and `fonts.h`. The fonts live in their own component because PlatformIO compiles C files in `src/` with C++-only flags, which fails.
+### When things go wrong
+| Situation | What you see |
+| --- | --- |
+| Wi-Fi down | The last schedule, a slashed Wi-Fi icon and indoor readings. Retries hourly. |
+| Offline for days, or the pickup day has passed | The history icon next to the date |
+| Power loss | The last schedule is saved in flash, so it's redrawn as soon as power returns |
+| Council website changed | The fetch fails and the last schedule stays on screen. The parser may need updating. |
 
-LVGL's regular Montserrat sizes 14, 16 and 20 are also enabled in `sdkconfig.defaults` (`CONFIG_LV_FONT_MONTSERRAT_<size>=y`).
+<details>
+<summary>Data sources</summary>
 
-**Images.** PNG files are embedded directly, with no conversion step:
-1. Put the PNG in `src/assets/`.
-2. Add its path to `board_build.embed_files` in `platformio.ini`.
-3. Declare it in `src/assets.h` with `ASSET_PNG(my_icon_png)` (the file name with `.` replaced by `_`).
-4. Draw it: `static lv_image_dsc_t icon = assetImage(my_icon_png_start, my_icon_png_end);` then `lv_image_set_src(img, &icon);`
+- **Collection days:** the Council's collection day page for your address, `.../rubbish-recycling-collection-days/<address ID>.html`. The page is about 2.7MB, but the household collection dates are in the first ~16KB, so the board stops reading once it has them. Dates come without a year, such as `Thursday, 8 October`, so the year is taken as the one in which that date falls on that weekday. This relies on the page's HTML rather than a published API, so a site redesign can break it.
+- **Weather:** [Open-Meteo](https://open-meteo.com) daily mean temperature and humidity for your location, in Auckland time. It's free and needs no API key.
+- **Time:** NTP from `nz.pool.ntp.org`, on every wake that gets online. The clock keeps running through deep sleep.
 
-LVGL's PNG decoder unpacks the image to 32-bit colour in RAM while drawing, so keep embedded PNGs icon-sized. A full-screen 200 × 200 image needs about 160KB. For large images, convert them to a C array in LVGL's `L8` or `I1` format with the [LVGL image converter](https://lvgl.io/tools/imageconverter) instead.
+</details>
 
-**Black and white conversion.** The panel shows only black and white. `DISPLAY_DITHERING` in `src/config.h` controls how greyscale becomes 1-bit:
-- `0` (default): a plain threshold. It keeps text and line icons crisp; greys become black or white.
-- `1`: Floyd–Steinberg dithering. Photos and gradients show as shading, but text edges get slightly speckled.
+<details>
+<summary>Battery and power</summary>
 
-For the sharpest results with either setting, design icons in pure black and white.
+- The battery voltage is read through the board's divider on GPIO0 and converted to a percentage with a lithium polymer discharge curve. With no battery connected, the charger's output reads as full.
+- Every wake keeps the board's battery power hold switched on. The panel is powered only while it's being redrawn.
+- The low battery LED uses light sleep between blinks, so the 10-minute reminder wakes cost little.
+- Deep sleep turns off USB, so a sleeping board can't be flashed. Staying awake while a computer is connected avoids that during development; set `STAY_AWAKE_ON_USB` to `0` to test real sleep while plugged in. Chargers and power banks don't count as a computer.
 
-### Previewing the screen on a computer
-`tools/preview/run.sh` renders the screen layout to PNGs in `tools/preview/out/`, using the same LVGL code, fonts and black and white conversion as the firmware. It covers an upcoming pickup, `TONIGHT`, `TODAY`, the widest possible date and readings, out-of-date data, a low battery, and offline with no readings. It also prints a warning if anything is drawn off screen. Use it to check a layout change before flashing. Afterwards, run `python3 tools/docs/make_images.py` to refresh the README images in `docs/images/`, including the labelled diagram. It needs a C/C++ compiler and zlib, which macOS includes, and LVGL in `managed_components/`, so run `pio run` once first. The first run compiles LVGL and takes about a minute.
+</details>
 
-## Buttons
-- **PWR (GPIO2):** a short press restarts the device and runs a full refresh (Wi-Fi, fetch, redraw). It works at any time, including from deep sleep: GPIO2 is one of the ESP32-C6's low-power GPIOs, so it can wake the chip. On battery, PWR also turns the board on, which is handled in hardware. Waking from deep sleep restarts the firmware from `app_main`; while the board is awake on USB, a press calls `esp_restart()`.
-- **BOOT (GPIO9):** hold it while powering on to enter download mode. The firmware doesn't use it: GPIO9 can't wake the chip from deep sleep, so it would only work in the few seconds a day the board is awake.
+## Development
 
-A restart isn't a power cycle. On USB power there's no way for the firmware to cut power. On battery, releasing the power hold (EXIO5) would switch the board off completely, but PWR would then be needed to turn it back on.
+<details>
+<summary>Project layout</summary>
 
-## Battery
-The battery voltage is read on GPIO0 through the board's 200k/200k divider, using ESP-IDF's calibrated ADC, averaged over 16 samples. It's converted to a charge percentage with a typical lithium polymer discharge curve (4.20V = 100%, 3.70V ≈ 31%, 3.30V = 0%). Readings while charging run high, and with no battery connected the charger's output on the battery pin reads as about 4.2V, so the glyph shows full while USB is plugged in. The board's red LED is driven by the charger chip and shows charging. It isn't connected to the ESP32-C6, so the firmware can't tell when the battery is charging.
-
-**Low battery reminder:** below `LOW_BATTERY_PERCENT` (10% by default), the board wakes every 10 minutes and double-blinks the green LED (TCA9554 EXIO4, active low) for 10 seconds: two quick flashes, then a pause, every second. Bin night uses a slow, even blink instead, so the two are easy to tell apart. The board's red LED can't be used for this: it's wired to the charger's status pin, not to the ESP32-C6 or the expander. These wakes don't use Wi-Fi or redraw the screen; the daily refresh still happens on schedule. Light sleep between blinks keeps their cost down. Blinking stops once the charge is back above `LOW_BATTERY_PERCENT` + 5%, so it doesn't flicker on and off around the threshold.
-
-## Power and deep sleep
-The firmware does one pass each time the device wakes, then goes back to sleep:
-
-1. Wake (cold boot or deep sleep timer)
-2. Read the onboard temperature and humidity sensor
-3. Connect to Wi-Fi (15 second timeout), set the clock from NTP, fetch the weather and the collection schedule, then switch Wi-Fi off
-4. Power the panel on (TCA9554 EXIO0), redraw it, put it into its own deep sleep, and power it off again. If the fetch failed, the last fetched schedule (kept in RTC memory) is redrawn with fresh readings. If there has never been a successful fetch, the panel is left alone.
-5. If the battery is low, or it's bin night, blink the LED for 10 seconds.
-6. Arm the PWR button as a wake source, waiting for it to be released first.
-7. Put the ESP32-C6 into deep sleep until the next refresh: 00:05 Auckland time, so `TODAY` is shown for the whole pickup day, or `BIN_NIGHT_HOUR` the evening before a pickup if that comes first. If the clock hasn't been set, the next refresh is `REFRESH_INTERVAL_HOURS` away instead. While the battery is low it wakes every 10 minutes to blink, then sleeps again until the refresh is due.
-
-**Failed refreshes:** if Wi-Fi or the schedule fetch fails, the next refresh is an hour later instead, for up to three retries in a row, before falling back to the normal schedule.
-
-**Time limit:** any wake that runs longer than 90 seconds, for example because of a hung network request, is cut short and the board goes into deep sleep with a retry due in an hour. The limit is lifted while a computer is connected over USB. If the limit is hit during a screen refresh, the panel's power may stay on until the next wake.
-
-Power on, reset, flashing and a PWR press always run a full refresh.
-
-The battery power hold (TCA9554 EXIO5) is driven high on every wake. The expander's registers are written directly and never reset, because the expander stays powered through deep sleep. A reset would briefly release the hold pin and could cut power on battery.
-
-The e-Paper panel keeps its image with no power, so the schedule stays visible while the device sleeps. Each wake starts from `app_main` like a fresh boot. Anything that must survive a sleep has to be kept in RTC memory or NVS. The last fetched schedule is kept in RTC memory and also saved to flash (NVS) after every successful fetch, so it survives power loss and reflashing too. On boot, if RTC memory is empty, the copy in flash is loaded. That way, the screen can be redrawn even if the board comes back up with no Wi-Fi.
-
-### Flashing and serial logs
-Deep sleep turns off the native USB port. To keep development simple, the firmware stays awake after refreshing for as long as a computer is connected over USB, then goes to sleep when it's unplugged. While plugged in, `pio run -t upload` and `pio device monitor` work normally. A USB charger or power bank doesn't count as a connected computer, so battery behaviour is unchanged. Set `STAY_AWAKE_ON_USB` to `0` in `src/config.h` to test real deep sleep while plugged in.
-
-If the board is already asleep, for example after running on battery, or is running firmware without this feature, use download mode. The board has no reset button: disconnect the battery, hold **BOOT** while unplugging and replugging USB-C, then upload.
-
-## Auckland Council data source
-The schedule comes from the Council's collection day page for your address:
-
-`https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days/<address ID>.html`
-
-**Finding your address ID:** search for your address on the [collection day page](https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html). The results page URL ends in `/<address ID>.html`. Put that number in `COUNCIL_ADDRESS_ID`. The Council's address search API needs a login token, so the device can't look the ID up itself.
-
-**How it's read:** the page is about 2.7MB, but the "Household collection" block with the next dates for rubbish, food scraps and recycling is in the first ~16KB. The device streams the page, stops once that block has arrived (capped at 96KB), and closes the connection. Dates look like `Thursday, 8 October` with no year, so the year is chosen as the one, closest to the current year, on which that date falls on that weekday. This handles December to January.
-
-The next pickup is the earliest of the three dates, and any bin not collected on that date is shown with a slash through it. `src/council_parser.cpp` does the parsing and has no ESP-IDF dependencies.
-
-This relies on the page's HTML, not a published API, so a Council website redesign can break it. If that happens, the log shows `collection dates not found` and the screen keeps the last fetched schedule.
-
-## Project layout
 | Path | Purpose |
 | --- | --- |
-| `src/main.cpp` | Wake, refresh and deep sleep cycle |
-| `src/auckland_council_client.*` | Fetches the collection day page |
-| `src/council_parser.*` | Extracts the next collection dates from the page |
-| `src/weather_client.*` | Current weather from Open-Meteo |
-| `src/network.*` | Wi-Fi connection and NTP clock sync |
-| `src/https_client.*` | Streaming HTTPS GET with certificate checking |
-| `src/storage.*` | Values saved in flash (NVS): the last schedule |
-| `src/display_manager.*` | LVGL setup and pushing rendered screens to the panel |
-| `src/ui/bin_screen.*` | Screen layout (plain LVGL, previewable on a computer) |
-| `src/ui/mono_convert.*` | Greyscale to 1-bit conversion (threshold or dithering) |
-| `src/shtc3.*` | SHTC3 temperature and humidity sensor driver |
-| `src/battery.*` | Battery voltage and charge percentage |
-| `components/fonts/` | Generated LVGL fonts (Montserrat Bold, Font Awesome icons) |
-| `tools/fonts/generate.sh` | Regenerates `components/fonts/` |
-| `tools/preview/` | Host preview of the screen layout |
-| `tools/docs/make_images.py`, `docs/images/` | README images: screen previews and the labelled diagram |
-| `src/epd_ssd1681.*` | e-Paper panel driver (SPI) |
-| `src/board_power.*` | Shared I2C bus and TCA9554 outputs (panel power, battery hold, LED) |
-| `src/board_pins.h` | Board pin map |
-| `src/assets.h`, `src/assets/` | Embedded PNG images |
-| `src/idf_component.yml` | ESP-IDF component dependencies (LVGL, cJSON) |
-| `src/collection_types.h` | Shared data types |
-| `src/config.example.h` | Template for the git-ignored `src/config.h` |
-| `sdkconfig.defaults` | ESP-IDF and LVGL settings, such as the 16MB flash size and enabled fonts. PlatformIO generates `sdkconfig.<env>` from this file. |
-| `partitions.csv` | Flash layout: a 4MB app partition, leaving the rest of the 16MB free for OTA or storage later |
+| `src/main.cpp` | Wake, refresh, scheduling and deep sleep |
+| `src/auckland_council_client.*`, `src/council_parser.*` | Fetch and parse the collection day page |
+| `src/weather_client.*` | Daily average weather from Open-Meteo |
+| `src/network.*`, `src/https_client.*` | Wi-Fi, NTP and streaming HTTPS |
+| `src/storage.*` | The last schedule, saved in flash (NVS) |
+| `src/display_manager.*`, `src/epd_ssd1681.*` | LVGL setup and the e-paper panel driver |
+| `src/ui/bin_screen.*` | Screen layout: plain LVGL, previewable on a computer |
+| `src/ui/mono_convert.*` | Greyscale to black and white, and the 180° flip |
+| `src/shtc3.*`, `src/battery.*` | Onboard sensor and battery reading |
+| `src/board_power.*`, `src/board_pins.h` | I2C, the I/O expander (panel power, battery hold, LED) and pins |
+| `components/fonts/` | Generated LVGL fonts: Montserrat Bold and Font Awesome icons |
+| `tools/preview/` | Renders the screen to PNGs on a computer |
+| `tools/fonts/generate.sh` | Regenerates the fonts |
+| `tools/docs/make_images.py` | Regenerates the README images in `docs/images/` |
+| `sdkconfig.defaults`, `partitions.csv` | ESP-IDF settings and the flash layout (4MB app partition) |
 
-To change an ESP-IDF setting permanently, add it to `sdkconfig.defaults`. The generated `sdkconfig.*` files are git-ignored.
+</details>
 
-## Status
-Working and tested on hardware: Wi-Fi, NTP clock sync, the Council schedule fetch, Open-Meteo weather with the sensor fallback, the bin screen layout, deep sleep, panel power and the battery hold, and staying awake on USB.
+<details>
+<summary>Previewing the screen and updating images</summary>
 
-Also tested on hardware: retrying after a failed fetch (with an invalid address ID), the 90 second time limit (temporarily cut to 5 seconds), the daily average weather, loading the schedule from flash after a reset with no Wi-Fi, and the out of date screen (with the 48 hour limit temporarily cut to 1 second). Not yet tested on hardware: the 00:05 and bin night wakes and the `TONIGHT` and `TODAY` screens, which depend on the date. The bin night date maths was checked on a computer across month, year and daylight saving boundaries.
+```sh
+pio run                              # once, so LVGL is downloaded
+./tools/preview/run.sh               # writes PNGs to tools/preview/out/
+python3 tools/docs/make_images.py    # refreshes docs/images/ and the diagram
+```
+The preview uses the same layout code, fonts and black and white conversion as the firmware. It warns if anything is drawn off screen. It needs a C/C++ compiler and zlib, both included with macOS.
 
-Also tested on hardware: the battery reading, the low battery LED blink (by temporarily raising the threshold), and the PWR button restart, both while awake and from deep sleep. Not yet tested: a real low battery over several 10-minute wakes.
+</details>
+
+<details>
+<summary>Fonts, icons and images</summary>
+
+- Fonts are compiled into the firmware as bitmaps and contain only the characters the screen uses. To add characters, icons or sizes, edit `tools/fonts/generate.sh` and run it. It needs Node.js. Then add any new font to `components/fonts/CMakeLists.txt` and `fonts.h`.
+- PNG images can be embedded from `src/assets/`. Add the file to `board_build.embed_files` in `platformio.ini` and declare it in `src/assets.h`. Keep them icon-sized: they're decoded to full colour in RAM.
+- `DISPLAY_DITHERING` chooses between a crisp threshold (best for text and icons) and dithered shading (best for photos).
+
+</details>
+
+<details>
+<summary>Hardware notes</summary>
+
+Board specs, pinout and schematic: [Waveshare docs](https://docs.waveshare.com/ESP32-C6-ePaper-1.54) and [examples](https://github.com/waveshareteam/ESP32-C6-ePaper-1.54). Details that matter to this firmware:
+
+- The e-paper panel is powered through I/O expander pin EXIO0, and the battery power hold is on EXIO5. The expander's registers are written directly and never reset, because a reset would briefly release the power hold.
+- The green LED is on EXIO4 and is active low. The red LED belongs to the charger.
+- The PWR button (GPIO2) can wake the chip from deep sleep. BOOT (GPIO9) can't, so the firmware doesn't use it.
+- The project uses ESP-IDF, not Arduino, through PlatformIO. LVGL and cJSON are ESP-IDF components; `dependencies.lock` pins their versions.
+
+</details>
 
 ## Licences
 - Project code: MIT (see `LICENSE`)
 - Montserrat font: SIL Open Font License 1.1
-- Font Awesome Free icons: CC BY 4.0, font files SIL Open Font License 1.1 ([fontawesome.com/license/free](https://fontawesome.com/license/free))
-- Weather data: [Open-Meteo](https://open-meteo.com), CC BY 4.0. Free for non-commercial use.
+- Font Awesome Free icons: CC BY 4.0; font files SIL Open Font License 1.1 ([fontawesome.com/license/free](https://fontawesome.com/license/free))
+- Weather data: [Open-Meteo](https://open-meteo.com), CC BY 4.0, free for non-commercial use
