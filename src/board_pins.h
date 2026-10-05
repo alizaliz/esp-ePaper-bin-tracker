@@ -15,6 +15,11 @@
 #define EPD_RST_PIN GPIO_NUM_11
 #define EPD_BUSY_PIN GPIO_NUM_10
 
+// PWR button: pulled up on the board, reads low while pressed. GPIO2 is one
+// of the ESP32-C6's low-power GPIOs (0-7), so it can wake the chip from deep
+// sleep. (BOOT is GPIO9, which can't.)
+#define PWR_BUTTON_PIN GPIO_NUM_2
+
 // I2C bus shared by the TCA9554 expander, PCF85063 RTC and SHTC3 sensor
 #define BOARD_I2C_PORT I2C_NUM_0
 #define BOARD_I2C_SDA_PIN GPIO_NUM_18

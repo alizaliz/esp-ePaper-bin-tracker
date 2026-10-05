@@ -108,6 +108,12 @@ For the sharpest results with either setting, design icons in pure black and whi
 ### Previewing the screen on a computer
 `tools/preview/run.sh` renders the screen layout to PNGs in `tools/preview/out/`, using the same LVGL code, fonts and black and white conversion as the firmware. It covers an upcoming pickup, `TODAY`, the widest possible date and readings, a low battery, and offline with no readings. It also prints a warning if anything is drawn off screen. Use it to check a layout change before flashing. It needs a C/C++ compiler and zlib, which macOS includes, and LVGL in `managed_components/`, so run `pio run` once first. The first run compiles LVGL and takes about a minute.
 
+## Buttons
+- **PWR (GPIO2):** a short press restarts the device and runs a full refresh (Wi-Fi, fetch, redraw). It works at any time, including from deep sleep: GPIO2 is one of the ESP32-C6's low-power GPIOs, so it can wake the chip. On battery, PWR also turns the board on, which is handled in hardware. Waking from deep sleep restarts the firmware from `app_main`; while the board is awake on USB, a press calls `esp_restart()`.
+- **BOOT (GPIO9):** hold it while powering on to enter download mode. The firmware doesn't use it: GPIO9 can't wake the chip from deep sleep, so it would only work in the few seconds a day the board is awake.
+
+A restart isn't a power cycle. On USB power there's no way for the firmware to cut power. On battery, releasing the power hold (EXIO5) would switch the board off completely, but PWR would then be needed to turn it back on.
+
 ## Battery
 The battery voltage is read on GPIO0 through the board's 200k/200k divider, using ESP-IDF's calibrated ADC, averaged over 16 samples. It's converted to a charge percentage with a typical lithium polymer discharge curve (4.20V = 100%, 3.70V ≈ 31%, 3.30V = 0%). Readings while charging run high, and with no battery connected the charger's output on the battery pin reads as about 4.2V, so the glyph shows full while USB is plugged in. The board's red LED is driven by the charger chip and shows charging. It isn't connected to the ESP32-C6, so the firmware can't tell when the battery is charging.
 
@@ -121,9 +127,10 @@ The firmware does one pass each time the device wakes, then goes back to sleep:
 3. Connect to Wi-Fi (15 second timeout), set the clock from NTP, fetch the weather and the collection schedule, then switch Wi-Fi off
 4. Power the panel on (TCA9554 EXIO0), redraw it, put it into its own deep sleep, and power it off again. If the fetch failed, the last fetched schedule (kept in RTC memory) is redrawn with fresh readings. If there has never been a successful fetch, the panel is left alone.
 5. If the battery is low, blink the LED for 10 seconds.
-6. Put the ESP32-C6 into deep sleep until the next refresh at 00:05 Auckland time, so `TODAY` is shown for the whole pickup day. If the clock hasn't been set, the next refresh is `REFRESH_INTERVAL_HOURS` away instead. While the battery is low it wakes every 10 minutes to blink, then sleeps again until the refresh is due.
+6. Arm the PWR button as a wake source, waiting for it to be released first.
+7. Put the ESP32-C6 into deep sleep until the next refresh at 00:05 Auckland time, so `TODAY` is shown for the whole pickup day. If the clock hasn't been set, the next refresh is `REFRESH_INTERVAL_HOURS` away instead. While the battery is low it wakes every 10 minutes to blink, then sleeps again until the refresh is due.
 
-Power on, reset and flashing always run a full refresh.
+Power on, reset, flashing and a PWR press always run a full refresh.
 
 The battery power hold (TCA9554 EXIO5) is driven high on every wake. The expander's registers are written directly and never reset, because the expander stays powered through deep sleep. A reset would briefly release the hold pin and could cut power on battery.
 
@@ -181,7 +188,7 @@ Working and tested on hardware: Wi-Fi, NTP clock sync, the Council schedule fetc
 
 Not yet tested on hardware: waking at 00:05 and showing `TODAY` on a pickup day. Both depend on the date, so they'll show up on the next pickup.
 
-Also tested on hardware: the battery reading and the low battery LED blink (by temporarily raising the threshold). Not yet tested: a real low battery over several 10-minute wakes.
+Also tested on hardware: the battery reading, the low battery LED blink (by temporarily raising the threshold), and the PWR button restart, both while awake and from deep sleep. Not yet tested: a real low battery over several 10-minute wakes.
 
 ## Licences
 - Project code: MIT (see `LICENSE`)

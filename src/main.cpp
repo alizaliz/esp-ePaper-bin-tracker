@@ -7,14 +7,17 @@
 #include <cstring>
 #include <vector>
 
+#include "driver/gpio.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_attr.h"
 #include "esp_sleep.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include "auckland_council_client.h"
 #include "battery.h"
+#include "board_pins.h"
 #include "board_power.h"
 #include "collection_types.h"
 #include "config.h"
@@ -60,11 +63,18 @@ struct Climate {
 };
 
 static void log_wakeup_cause(void) {
-  if (esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_TIMER)) {
+  const uint32_t causes = esp_sleep_get_wakeup_causes();
+  if (causes & BIT(ESP_SLEEP_WAKEUP_EXT1)) {
+    printf("Woke by the PWR button\n");
+  } else if (causes & BIT(ESP_SLEEP_WAKEUP_TIMER)) {
     printf("Woke from deep sleep (timer)\n");
   } else {
     printf("Cold boot or reset\n");
   }
+}
+
+static bool pwr_button_pressed(void) {
+  return gpio_get_level(PWR_BUTTON_PIN) == 0;
 }
 
 // The system clock keeps running through deep sleep once it has been set by
@@ -123,9 +133,18 @@ static void stay_awake_while_usb_connected(void) {
   if (!usb_serial_jtag_is_connected()) return;
 
   printf("Computer connected over USB: staying awake for flashing and logs. "
-         "Unplug to sleep.\n");
+         "Unplug to sleep, or press PWR to restart.\n");
+  // Only act on a press that starts while awake, not one still held from
+  // waking the board.
+  bool armed = !pwr_button_pressed();
   while (usb_serial_jtag_is_connected()) {
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    if (!pwr_button_pressed()) {
+      armed = true;
+    } else if (armed) {
+      printf("PWR pressed: restarting\n");
+      esp_restart();
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
 
@@ -135,6 +154,14 @@ static void enter_deep_sleep(void) {
   if (battery_low && sleep_s > LOW_BATTERY_BLINK_INTERVAL_S) {
     sleep_s = LOW_BATTERY_BLINK_INTERVAL_S;
   }
+  // A press of PWR wakes the board, which restarts the firmware and runs a
+  // full refresh. Wait for release first so a held button doesn't wake it
+  // straight back up.
+  while (pwr_button_pressed()) {
+    vTaskDelay(pdMS_TO_TICKS(50));
+  }
+  esp_sleep_enable_ext1_wakeup_io(1ULL << PWR_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+
   printf("Deep sleeping for %lld minutes\n", sleep_s / 60);
   esp_sleep_enable_timer_wakeup((uint64_t)sleep_s * 1000000ULL);
   esp_deep_sleep_start();
@@ -304,10 +331,15 @@ extern "C" void app_main(void) {
   setenv("TZ", TIMEZONE, 1);
   tzset();
 
+  gpio_config_t button = {};
+  button.pin_bit_mask = 1ULL << PWR_BUTTON_PIN;
+  button.mode = GPIO_MODE_INPUT;  // the board has its own pull-up
+  gpio_config(&button);
+
   const int battery_pct = check_battery();
 
   // A timer wake before the refresh is due only blinks the low battery LED.
-  // Any other wake (power on, reset, flashing) always refreshes.
+  // Any other wake (PWR button, power on, reset, flashing) always refreshes.
   const bool timer_wake = esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_TIMER);
   if (!timer_wake || time(nullptr) >= next_refresh) {
     full_refresh(battery_pct);
