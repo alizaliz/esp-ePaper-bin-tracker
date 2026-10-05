@@ -152,7 +152,7 @@ Power on, reset, flashing and a PWR press always run a full refresh.
 
 The battery power hold (TCA9554 EXIO5) is driven high on every wake. The expander's registers are written directly and never reset, because the expander stays powered through deep sleep. A reset would briefly release the hold pin and could cut power on battery.
 
-The e-Paper panel keeps its image with no power, so the schedule stays visible while the device sleeps. Each wake starts from `app_main` like a fresh boot. Anything that must survive a sleep has to be kept in RTC memory or NVS. The last fetched schedule is kept in RTC memory, so it survives deep sleep but not a power loss.
+The e-Paper panel keeps its image with no power, so the schedule stays visible while the device sleeps. Each wake starts from `app_main` like a fresh boot. Anything that must survive a sleep has to be kept in RTC memory or NVS. The last fetched schedule is kept in RTC memory and also saved to flash (NVS) after every successful fetch, so it survives power loss and reflashing too. On boot, if RTC memory is empty, the copy in flash is loaded. That way, the screen can be redrawn even if the board comes back up with no Wi-Fi.
 
 ### Flashing and serial logs
 Deep sleep turns off the native USB port. To keep development simple, the firmware stays awake after refreshing for as long as a computer is connected over USB, then goes to sleep when it's unplugged. While plugged in, `pio run -t upload` and `pio device monitor` work normally. A USB charger or power bank doesn't count as a connected computer, so battery behaviour is unchanged. Set `STAY_AWAKE_ON_USB` to `0` in `src/config.h` to test real deep sleep while plugged in.
@@ -181,6 +181,7 @@ This relies on the page's HTML, not a published API, so a Council website redesi
 | `src/weather_client.*` | Current weather from Open-Meteo |
 | `src/network.*` | Wi-Fi connection and NTP clock sync |
 | `src/https_client.*` | Streaming HTTPS GET with certificate checking |
+| `src/storage.*` | Values saved in flash (NVS): the last schedule |
 | `src/display_manager.*` | LVGL setup and pushing rendered screens to the panel |
 | `src/ui/bin_screen.*` | Screen layout (plain LVGL, previewable on a computer) |
 | `src/ui/mono_convert.*` | Greyscale to 1-bit conversion (threshold or dithering) |

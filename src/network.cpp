@@ -9,7 +9,6 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
-#include "nvs_flash.h"
 
 #include "config.h"
 
@@ -35,20 +34,10 @@ void onEvent(void*, esp_event_base_t base, int32_t id, void*) {
   }
 }
 
-esp_err_t initNvs() {
-  esp_err_t err = nvs_flash_init();
-  if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    ESP_RETURN_ON_ERROR(nvs_flash_erase(), TAG, "NVS erase failed");
-    err = nvs_flash_init();
-  }
-  return err;
-}
-
 }  // namespace
 
 esp_err_t connect(int timeout_ms) {
   if (!started) {
-    ESP_RETURN_ON_ERROR(initNvs(), TAG, "NVS init failed");  // Wi-Fi stores calibration in NVS
     ESP_RETURN_ON_ERROR(esp_netif_init(), TAG, "netif init failed");
     ESP_RETURN_ON_ERROR(esp_event_loop_create_default(), TAG, "event loop failed");
     esp_netif_create_default_wifi_sta();

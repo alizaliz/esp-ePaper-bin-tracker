@@ -7,6 +7,8 @@
 namespace network {
 
 // Connects to WIFI_SSID and waits for an IP address, up to timeout_ms.
+// storage::init() must have been called first: Wi-Fi keeps calibration data
+// in NVS.
 esp_err_t connect(int timeout_ms);
 
 // Sets the system clock from NTP, up to timeout_ms. Needs a connection.

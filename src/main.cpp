@@ -25,6 +25,7 @@
 #include "display_manager.h"
 #include "network.h"
 #include "shtc3.h"
+#include "storage.h"
 #include "weather_client.h"
 
 // Auckland local time, including daylight saving.
@@ -51,16 +52,22 @@ static const int LOW_BATTERY_BLINK_INTERVAL_S = 10 * 60;
 static const int WIFI_TIMEOUT_MS = 15000;
 static const int NTP_TIMEOUT_MS = 10000;
 
-// The last schedule fetched, kept in RTC memory across deep sleep so the
-// screen (and the readings on it) can still be refreshed when a fetch fails.
+// The last schedule fetched. Kept in RTC memory across deep sleep, and saved
+// to flash so it also survives power loss and reflashing. Lets the screen (and
+// the readings on it) still be refreshed when a fetch fails.
 struct Schedule {
   bool valid;
   Date pickup;
   bool rubbish;
   bool recycling;
   bool foodScraps;
+  time_t fetchedAt;  // when it was fetched, as a time() value
 };
 RTC_DATA_ATTR static Schedule last_schedule = {};
+
+// Flash key for the schedule. Change it if Schedule's layout changes, so an
+// old saved copy is ignored rather than misread.
+static const char* SCHEDULE_KEY = "schedule_v1";
 
 // When the next full refresh (Wi-Fi, fetch, redraw) is due, as a time()
 // value. Low battery wakes in between only blink the LED.
@@ -390,7 +397,11 @@ static bool full_refresh(int battery_pct) {
     Schedule schedule;
     fetched = fetch_schedule(schedule);
     if (fetched) {
+      schedule.fetchedAt = time(nullptr);
       last_schedule = schedule;
+      if (storage::save(SCHEDULE_KEY, &last_schedule, sizeof(last_schedule)) != ESP_OK) {
+        printf("Failed to save the schedule to flash\n");
+      }
     } else if (last_schedule.valid) {
       printf("Using the last fetched schedule\n");
     }
@@ -428,6 +439,20 @@ extern "C" void app_main(void) {
 
   setenv("TZ", TIMEZONE, 1);
   tzset();
+
+  if (storage::init() != ESP_OK) {
+    printf("Flash storage init failed\n");
+  }
+  // RTC memory is cleared by power loss and reflashing; fall back to the copy
+  // in flash.
+  if (!last_schedule.valid) {
+    Schedule saved;
+    if (storage::load(SCHEDULE_KEY, &saved, sizeof(saved)) == ESP_OK && saved.valid) {
+      last_schedule = saved;
+      printf("Loaded the last schedule from flash (pickup %04d-%02d-%02d)\n", saved.pickup.year,
+             saved.pickup.month, saved.pickup.day);
+    }
+  }
 
   gpio_config_t button = {};
   button.pin_bit_mask = 1ULL << PWR_BUTTON_PIN;
