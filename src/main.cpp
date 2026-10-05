@@ -282,20 +282,36 @@ static int check_battery(void) {
   return percent;
 }
 
-// Blinks the green LED once a second for LED_BLINK_DURATION_S. Light sleep
-// between toggles keeps the cost of these wakes down; the expander holds the
-// LED state meanwhile. Light sleep drops USB, so plain delays are used while a
-// computer is connected.
-static void blink_led(const char* reason) {
+// One second of LED blinking: on/off steps with their lengths. The board only
+// has one LED the firmware can drive (the red one belongs to the charger), so
+// the two reminders are told apart by pattern.
+struct BlinkStep {
+  bool on;
+  int ms;
+};
+// Bin night: a slow, even blink.
+static const BlinkStep BIN_NIGHT_BLINK[] = {{true, 500}, {false, 500}};
+// Low battery: two quick flashes, then a pause.
+static const BlinkStep LOW_BATTERY_BLINK[] = {
+    {true, 150}, {false, 150}, {true, 150}, {false, 550}};
+
+// Blinks the green LED with a one-second pattern, repeated for
+// LED_BLINK_DURATION_S. Light sleep between steps keeps the cost of these
+// wakes down; the expander holds the LED state meanwhile. Light sleep drops
+// USB, so plain delays are used while a computer is connected.
+template <size_t N>
+static void blink_led(const char* reason, const BlinkStep (&pattern)[N]) {
   printf("%s: blinking the LED\n", reason);
   const bool usb = usb_serial_jtag_is_connected();
-  for (int i = 0; i < LED_BLINK_DURATION_S * 2; ++i) {
-    board_power::setLed(i % 2 == 0);
-    if (usb) {
-      vTaskDelay(pdMS_TO_TICKS(500));
-    } else {
-      esp_sleep_enable_timer_wakeup(500 * 1000);
-      esp_light_sleep_start();
+  for (int second = 0; second < LED_BLINK_DURATION_S; ++second) {
+    for (const BlinkStep& step : pattern) {
+      board_power::setLed(step.on);
+      if (usb) {
+        vTaskDelay(pdMS_TO_TICKS(step.ms));
+      } else {
+        esp_sleep_enable_timer_wakeup((uint64_t)step.ms * 1000);
+        esp_light_sleep_start();
+      }
     }
   }
   board_power::setLed(false);
@@ -494,9 +510,9 @@ extern "C" void app_main(void) {
   }
 
   if (battery_low) {
-    blink_led("Battery low");
+    blink_led("Battery low", LOW_BATTERY_BLINK);
   } else if (tonight && BIN_NIGHT_LED) {
-    blink_led("Bin night");
+    blink_led("Bin night", BIN_NIGHT_BLINK);
   }
 
   stay_awake_while_usb_connected();

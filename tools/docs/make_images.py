@@ -111,7 +111,7 @@ def build_diagram():
     parts.append(f'<text x="40" y="{panel}" class="h">On the board</text>')
     parts.append(f'<line x1="40" y1="{panel + 12}" x2="920" y2="{panel + 12}" class="rule"/>')
     items = [
-        ("led", "Green LED", ["Blinks for 10 s every", "10 min below 10% battery"]),
+        ("led", "Green LED", ["Double-blinks every 10 min", "below 10% battery; slow", "blink on bin night"]),
         ("pwr", "PWR button", ["Press to restart and", "refresh; powers on", "from battery"]),
         ("boot", "BOOT button", ["Hold while powering on", "for download mode"]),
         ("usb", "USB-C", ["Power, charging,", "flashing and logs"]),
