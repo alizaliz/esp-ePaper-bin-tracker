@@ -53,6 +53,9 @@ void DisplayManager::flush(lv_display_t* display, const lv_area_t* area, uint8_t
   } else {
     mono::threshold(px_map, self->frame_, WIDTH, HEIGHT);
   }
+  if (DISPLAY_FLIP) {
+    mono::rotate180(self->frame_, WIDTH, HEIGHT);
+  }
   lv_display_flush_ready(display);
 }
 

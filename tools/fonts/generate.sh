@@ -28,6 +28,10 @@ conv() {
 conv --font "$MONTSERRAT" --size 40 --symbols "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 " \
   --lv-font-name font_bold_40 -o "$OUT/font_bold_40.c"
 
+# "TODAY" and "TONIGHT" banners (TONIGHT is too wide for the 40px size)
+conv --font "$MONTSERRAT" --size 32 --symbols "ADGHINOTY" \
+  --lv-font-name font_bold_32 -o "$OUT/font_bold_32.c"
+
 # Temperature and humidity readings
 conv --font "$MONTSERRAT" --size 18 --symbols "0123456789-°C% " \
   --lv-font-name font_bold_18 -o "$OUT/font_bold_18.c"

@@ -7,6 +7,7 @@
 extern "C" {
 #endif
 LV_FONT_DECLARE(font_bold_40)  // Montserrat Bold: A-Z, 0-9, space
+LV_FONT_DECLARE(font_bold_32)  // Montserrat Bold: TODAY, TONIGHT
 LV_FONT_DECLARE(font_bold_18)  // Montserrat Bold: 0-9 - ° C %
 LV_FONT_DECLARE(icons_52)      // Font Awesome: bin icons
 LV_FONT_DECLARE(icons_22)      // Font Awesome: wifi, thermometer, droplet

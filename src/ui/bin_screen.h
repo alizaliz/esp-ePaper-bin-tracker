@@ -8,6 +8,7 @@
 struct BinScreenData {
   Date pickup;        // next collection day
   bool isToday = false;
+  bool isTonight = false;  // evening before the pickup: put the bins out
 
   // Which bins go out on the pickup day
   bool rubbish = false;

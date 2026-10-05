@@ -21,6 +21,13 @@
 #define WEATHER_LATITUDE -36.85
 #define WEATHER_LONGITUDE 174.76
 
+// The evening before a pickup, the device wakes at this hour (24h, local
+// time) and shows TONIGHT as a reminder to put the bins out.
+#define BIN_NIGHT_HOUR 18
+
+// 1: also blink the green LED for 10 seconds at the bin night wake.
+#define BIN_NIGHT_LED 1
+
 // The device wakes just after midnight each day once its clock has been set.
 // If the clock has never been set (no Wi-Fi time sync yet), it sleeps for this
 // many hours instead.
@@ -29,6 +36,10 @@
 // 0: convert the screen to black and white with a plain threshold (crisp text).
 // 1: use Floyd-Steinberg dithering so greyscale images show as shading.
 #define DISPLAY_DITHERING 0
+
+// 1: rotate the image 180 degrees so the USB-C and LED end of the board is at
+// the top. 0: the panel's native orientation, with that end at the bottom.
+#define DISPLAY_FLIP 1
 
 // Added to the onboard sensor's temperature to correct for the board warming
 // it. The device is only awake for a few seconds per wake, so this is usually

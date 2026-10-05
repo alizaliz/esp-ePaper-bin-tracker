@@ -13,4 +13,7 @@ void threshold(const uint8_t* grey, uint8_t* frame, int width, int height);
 // Floyd-Steinberg error diffusion: shows greys as shading.
 void dither(const uint8_t* grey, uint8_t* frame, int width, int height);
 
+// Rotates a 1-bit frame by 180 degrees in place.
+void rotate180(uint8_t* frame, int width, int height);
+
 }  // namespace mono

@@ -1,5 +1,6 @@
 #include "mono_convert.h"
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -40,6 +41,20 @@ void dither(const uint8_t* grey, uint8_t* frame, int width, int height) {
     }
     cur.swap(next);
     std::fill(next.begin(), next.end(), 0);
+  }
+}
+
+void rotate180(uint8_t* frame, int width, int height) {
+  // With whole bytes per row, a 180 degree turn is the byte order reversed
+  // and the bits within each byte reversed.
+  const int bytes = width / 8 * height;
+  std::reverse(frame, frame + bytes);
+  for (int i = 0; i < bytes; ++i) {
+    uint8_t b = frame[i];
+    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+    b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+    frame[i] = b;
   }
 }
 

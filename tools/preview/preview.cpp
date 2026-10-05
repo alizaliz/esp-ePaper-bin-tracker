@@ -119,6 +119,11 @@ int main(int argc, char** argv) {
   today.recycling = true;
   render(display, today, out + "/today.png");
 
+  BinScreenData tonight = today;
+  tonight.isToday = false;
+  tonight.isTonight = true;
+  render(display, tonight, out + "/tonight.png");
+
   BinScreenData widest = upcoming;  // widest date text and readings
   widest.pickup = {2026, 9, 30};
   widest.temperatureC = -9;

@@ -70,19 +70,24 @@ If the first build after a clean, or after deleting `sdkconfig.esp32-c6-devkitc-
 ## Display and graphics
 
 ### Screen layout
-| Upcoming pickup | Pickup day | Low battery | Offline |
-| :---: | :---: | :---: | :---: |
-| ![Upcoming pickup](docs/images/screen_upcoming.png) | ![TODAY on the pickup day](docs/images/screen_today.png) | ![Low battery](docs/images/screen_low_battery.png) | ![Offline, with no readings](docs/images/screen_offline.png) |
-| Rubbish and food scraps go out on Thursday; recycling doesn't | All three bins go out today | Battery almost empty; the green LED also blinks | No Wi-Fi and no sensor reading |
+| Upcoming pickup | Bin night | Pickup day |
+| :---: | :---: | :---: |
+| ![Upcoming pickup](docs/images/screen_upcoming.png) | ![TONIGHT the evening before](docs/images/screen_tonight.png) | ![TODAY on the pickup day](docs/images/screen_today.png) |
+| Rubbish and food scraps go out on Thursday; recycling doesn't | Put all three bins out tonight | All three bins go out today |
 
-These are host previews, rendered by the same layout code and fonts as the firmware.
+| Low battery | Offline |
+| :---: | :---: |
+| ![Low battery](docs/images/screen_low_battery.png) | ![Offline, with no readings](docs/images/screen_offline.png) |
+| Battery almost empty; the green LED also blinks | No Wi-Fi and no sensor reading |
+
+These are host previews, rendered by the same layout code and fonts as the firmware. On the device, the image is rotated 180° (`DISPLAY_FLIP`) so the USB-C and LED end of the board is at the top.
 
 - **Top row, centred:** Wi-Fi status, temperature (°C), relative humidity (%) and battery charge.
   - The Wi-Fi icon shows whether this refresh got online. A slash through it means the connection failed, so the schedule shown is the last one fetched.
   - Temperature and humidity are the current outdoor weather from [Open-Meteo](https://open-meteo.com) for `WEATHER_LATITUDE`/`WEATHER_LONGITUDE`. If Wi-Fi or the request fails, the onboard SHTC3 sensor (indoor) is used instead, and if that fails too it shows `--`. Set `USE_ONLINE_WEATHER` to `0` to always use the sensor.
   - The sensor is read first thing on wake, before Wi-Fi and the display warm the board. If its readings run warm, set `TEMPERATURE_OFFSET_C`.
   - The battery glyph's fill is proportional to the charge. It's updated with each redraw, so once a day.
-- **Middle:** the next pickup day in bold, e.g. `THU 8`. On the pickup day itself this becomes `TODAY` in white on a black strip.
+- **Middle:** the next pickup day in bold, e.g. `THU 8`. From `BIN_NIGHT_HOUR` (18:00) the evening before, it shows `TONIGHT` as a reminder to put the bins out, and the green LED blinks for 10 seconds (`BIN_NIGHT_LED`). On the pickup day itself it shows `TODAY`. Both are in the same bold white text on a black strip.
 - **Bottom:** three bin icons (rubbish, recycling, food scraps), each with a tick if it goes out on that pickup day or a cross if it doesn't.
 
 `TODAY` needs the current date. The clock is set from NTP (`nz.pool.ntp.org`) on every wake that gets online, and keeps running through deep sleep in between.
@@ -135,9 +140,13 @@ The firmware does one pass each time the device wakes, then goes back to sleep:
 2. Read the onboard temperature and humidity sensor
 3. Connect to Wi-Fi (15 second timeout), set the clock from NTP, fetch the weather and the collection schedule, then switch Wi-Fi off
 4. Power the panel on (TCA9554 EXIO0), redraw it, put it into its own deep sleep, and power it off again. If the fetch failed, the last fetched schedule (kept in RTC memory) is redrawn with fresh readings. If there has never been a successful fetch, the panel is left alone.
-5. If the battery is low, blink the LED for 10 seconds.
+5. If the battery is low, or it's bin night, blink the LED for 10 seconds.
 6. Arm the PWR button as a wake source, waiting for it to be released first.
-7. Put the ESP32-C6 into deep sleep until the next refresh at 00:05 Auckland time, so `TODAY` is shown for the whole pickup day. If the clock hasn't been set, the next refresh is `REFRESH_INTERVAL_HOURS` away instead. While the battery is low it wakes every 10 minutes to blink, then sleeps again until the refresh is due.
+7. Put the ESP32-C6 into deep sleep until the next refresh: 00:05 Auckland time, so `TODAY` is shown for the whole pickup day, or `BIN_NIGHT_HOUR` the evening before a pickup if that comes first. If the clock hasn't been set, the next refresh is `REFRESH_INTERVAL_HOURS` away instead. While the battery is low it wakes every 10 minutes to blink, then sleeps again until the refresh is due.
+
+**Failed refreshes:** if Wi-Fi or the schedule fetch fails, the next refresh is an hour later instead, for up to three retries in a row, before falling back to the normal schedule.
+
+**Time limit:** any wake that runs longer than 90 seconds, for example because of a hung network request, is cut short and the board goes into deep sleep with a retry due in an hour. The limit is lifted while a computer is connected over USB. If the limit is hit during a screen refresh, the panel's power may stay on until the next wake.
 
 Power on, reset, flashing and a PWR press always run a full refresh.
 
@@ -196,7 +205,7 @@ To change an ESP-IDF setting permanently, add it to `sdkconfig.defaults`. The ge
 ## Status
 Working and tested on hardware: Wi-Fi, NTP clock sync, the Council schedule fetch, Open-Meteo weather with the sensor fallback, the bin screen layout, deep sleep, panel power and the battery hold, and staying awake on USB.
 
-Not yet tested on hardware: waking at 00:05 and showing `TODAY` on a pickup day. Both depend on the date, so they'll show up on the next pickup.
+Also tested on hardware: retrying after a failed fetch (with an invalid address ID) and the 90 second time limit (temporarily cut to 5 seconds). Not yet tested on hardware: the 00:05 and bin night wakes and the `TONIGHT` and `TODAY` screens, which depend on the date. The bin night date maths was checked on a computer across month, year and daylight saving boundaries.
 
 Also tested on hardware: the battery reading, the low battery LED blink (by temporarily raising the threshold), and the PWR button restart, both while awake and from deep sleep. Not yet tested: a real low battery over several 10-minute wakes.
 

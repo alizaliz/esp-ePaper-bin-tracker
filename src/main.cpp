@@ -12,6 +12,7 @@
 #include "esp_attr.h"
 #include "esp_sleep.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -33,9 +34,19 @@ static const char* TIMEZONE = "NZST-12NZDT,M9.5.0,M4.1.0/3";
 static const int WAKE_HOUR = 0;
 static const int WAKE_MINUTE = 5;
 
+// After a failed refresh (no Wi-Fi or no schedule), retry this soon, up to
+// MAX_RETRIES times, before falling back to the normal schedule.
+static const int RETRY_INTERVAL_S = 60 * 60;
+static const int MAX_RETRIES = 3;
+
+// A wake that runs longer than this (e.g. a hung request) is cut short and
+// the board forced into deep sleep, so it can't drain the battery.
+static const int MAX_AWAKE_S = 90;
+
+static const int LED_BLINK_DURATION_S = 10;
+
 // While the battery is low, wake this often to blink the LED.
 static const int LOW_BATTERY_BLINK_INTERVAL_S = 10 * 60;
-static const int LOW_BATTERY_BLINK_DURATION_S = 10;
 
 static const int WIFI_TIMEOUT_MS = 15000;
 static const int NTP_TIMEOUT_MS = 10000;
@@ -55,6 +66,9 @@ RTC_DATA_ATTR static Schedule last_schedule = {};
 // value. Low battery wakes in between only blink the LED.
 RTC_DATA_ATTR static time_t next_refresh = 0;
 RTC_DATA_ATTR static bool battery_low = false;
+RTC_DATA_ATTR static int failed_refreshes = 0;
+
+static esp_timer_handle_t awake_cap_timer = nullptr;
 
 struct Climate {
   bool valid;
@@ -115,12 +129,79 @@ static time_t next_wake_time(void) {
   return next;
 }
 
-// When the refresh after this one should happen.
-static time_t schedule_next_refresh(void) {
-  if (clock_is_set()) return next_wake_time();
-  // Without the time of day, fall back to a fixed interval. time() still
-  // counts up through deep sleep even when it hasn't been set.
-  return time(nullptr) + (time_t)REFRESH_INTERVAL_HOURS * 60 * 60;
+// Local time on a date. mktime normalises out-of-range days, so
+// {y, m, d - 1} gives the day before.
+static time_t local_time_on(const Date& date, int hour, int minute) {
+  struct tm t = {};
+  t.tm_year = date.year - 1900;
+  t.tm_mon = date.month - 1;
+  t.tm_mday = date.day;
+  t.tm_hour = hour;
+  t.tm_min = minute;
+  t.tm_isdst = -1;
+  return mktime(&t);
+}
+
+// BIN_NIGHT_HOUR on the evening before the next pickup.
+static time_t bin_night_start(void) {
+  const Date& p = last_schedule.pickup;
+  return local_time_on({p.year, p.month, p.day - 1}, BIN_NIGHT_HOUR, 0);
+}
+
+// From BIN_NIGHT_HOUR the evening before a pickup until midnight.
+static bool is_bin_night(void) {
+  if (!clock_is_set() || !last_schedule.valid) return false;
+  const time_t now = time(nullptr);
+  return now >= bin_night_start() && now < local_time_on(last_schedule.pickup, 0, 0);
+}
+
+// When the refresh after this one should happen: just after midnight, or the
+// bin night reminder if that comes first. After a failed refresh, retry
+// sooner, a limited number of times.
+static time_t schedule_next_refresh(bool refresh_ok) {
+  const time_t now = time(nullptr);
+  time_t next;
+  if (clock_is_set()) {
+    next = next_wake_time();
+    if (last_schedule.valid) {
+      const time_t bin_night = bin_night_start();
+      if (bin_night > now && bin_night < next) next = bin_night;
+    }
+  } else {
+    // Without the time of day, fall back to a fixed interval. time() still
+    // counts up through deep sleep even when it hasn't been set.
+    next = now + (time_t)REFRESH_INTERVAL_HOURS * 60 * 60;
+  }
+
+  if (!refresh_ok && failed_refreshes <= MAX_RETRIES) {
+    const time_t retry = now + RETRY_INTERVAL_S;
+    if (retry < next) {
+      printf("Refresh failed (%d in a row); retrying in %d minutes\n", failed_refreshes,
+             RETRY_INTERVAL_S / 60);
+      next = retry;
+    }
+  }
+  return next;
+}
+
+// Runs if a wake goes on too long. Sleeps as if the refresh had failed, so a
+// retry is due when the board next wakes.
+static void awake_cap_expired(void*) {
+  printf("Awake for more than %d s: forcing deep sleep\n", MAX_AWAKE_S);
+  failed_refreshes++;
+  next_refresh = time(nullptr) + RETRY_INTERVAL_S;
+  esp_sleep_enable_ext1_wakeup_io(1ULL << PWR_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+  esp_sleep_enable_timer_wakeup((uint64_t)RETRY_INTERVAL_S * 1000000ULL);
+  esp_deep_sleep_start();
+}
+
+static void start_awake_cap(void) {
+  esp_timer_create_args_t args = {};
+  args.callback = awake_cap_expired;
+  args.name = "awake_cap";
+  if (esp_timer_create(&args, &awake_cap_timer) == ESP_OK) {
+    esp_timer_start_once(awake_cap_timer, (uint64_t)MAX_AWAKE_S * 1000000ULL);
+  }
 }
 
 // Deep sleep turns off the USB port, so a sleeping board can't be flashed or
@@ -131,6 +212,9 @@ static void stay_awake_while_usb_connected(void) {
   if (!STAY_AWAKE_ON_USB) return;
   vTaskDelay(pdMS_TO_TICKS(200));  // give the USB host time to start polling
   if (!usb_serial_jtag_is_connected()) return;
+
+  // Staying awake is intended here, so the awake time cap no longer applies.
+  if (awake_cap_timer != nullptr) esp_timer_stop(awake_cap_timer);
 
   printf("Computer connected over USB: staying awake for flashing and logs. "
          "Unplug to sleep, or press PWR to restart.\n");
@@ -185,14 +269,14 @@ static int check_battery(void) {
   return percent;
 }
 
-// Blinks the green LED once a second for LOW_BATTERY_BLINK_DURATION_S.
-// Light sleep between toggles keeps the cost of these wakes down; the
-// expander holds the LED state meanwhile. Light sleep drops USB, so plain
-// delays are used while a computer is connected.
-static void blink_low_battery_led(void) {
-  printf("Battery low: blinking the LED\n");
+// Blinks the green LED once a second for LED_BLINK_DURATION_S. Light sleep
+// between toggles keeps the cost of these wakes down; the expander holds the
+// LED state meanwhile. Light sleep drops USB, so plain delays are used while a
+// computer is connected.
+static void blink_led(const char* reason) {
+  printf("%s: blinking the LED\n", reason);
   const bool usb = usb_serial_jtag_is_connected();
-  for (int i = 0; i < LOW_BATTERY_BLINK_DURATION_S * 2; ++i) {
+  for (int i = 0; i < LED_BLINK_DURATION_S * 2; ++i) {
     board_power::setLed(i % 2 == 0);
     if (usb) {
       vTaskDelay(pdMS_TO_TICKS(500));
@@ -259,15 +343,17 @@ static bool fetch_schedule(Schedule& schedule) {
   return true;
 }
 
-static void refresh_display(bool online, const Climate& climate, int battery_pct) {
+// Redraws the screen. Returns true if it shows the bin night reminder.
+static bool refresh_display(bool online, const Climate& climate, int battery_pct) {
   if (!last_schedule.valid) {
     printf("No schedule yet; leaving the display unchanged\n");
-    return;
+    return false;
   }
 
   BinScreenData data;
   data.pickup = last_schedule.pickup;
   data.isToday = clock_is_set() && local_today() == last_schedule.pickup;
+  data.isTonight = !data.isToday && is_bin_night();
   data.rubbish = last_schedule.rubbish;
   data.recycling = last_schedule.recycling;
   data.foodScraps = last_schedule.foodScraps;
@@ -281,16 +367,18 @@ static void refresh_display(bool online, const Climate& climate, int battery_pct
   if (DisplayManager().show(data) != ESP_OK) {
     printf("Failed to update the display\n");
   }
+  return data.isTonight;
 }
 
 // Reads the sensor, goes online for the clock, weather and schedule, and
-// redraws the screen.
-static void full_refresh(int battery_pct) {
+// redraws the screen. Returns true if it shows the bin night reminder.
+static bool full_refresh(int battery_pct) {
   const Climate sensor = read_sensor();
   Climate weather = {};
 
   // Wi-Fi is only on for as long as the fetches take.
   const bool online = network::connect(WIFI_TIMEOUT_MS) == ESP_OK;
+  bool fetched = false;
   if (online) {
     if (network::syncTime(NTP_TIMEOUT_MS) != ESP_OK) {
       printf("Failed to sync the clock\n");
@@ -299,7 +387,8 @@ static void full_refresh(int battery_pct) {
       weather = fetch_weather();
     }
     Schedule schedule;
-    if (fetch_schedule(schedule)) {
+    fetched = fetch_schedule(schedule);
+    if (fetched) {
       last_schedule = schedule;
     } else if (last_schedule.valid) {
       printf("Using the last fetched schedule\n");
@@ -314,13 +403,21 @@ static void full_refresh(int battery_pct) {
     printf("Today is %04d-%02d-%02d\n", today.year, today.month, today.day);
   }
 
-  refresh_display(online, weather.valid ? weather : sensor, battery_pct);
-  next_refresh = schedule_next_refresh();
+  const bool tonight = refresh_display(online, weather.valid ? weather : sensor, battery_pct);
+
+  failed_refreshes = fetched ? 0 : failed_refreshes + 1;
+  next_refresh = schedule_next_refresh(fetched);
+  struct tm next;
+  localtime_r(&next_refresh, &next);
+  printf("Next refresh at %04d-%02d-%02d %02d:%02d\n", next.tm_year + 1900, next.tm_mon + 1,
+         next.tm_mday, next.tm_hour, next.tm_min);
+  return tonight;
 }
 
 extern "C" void app_main(void) {
   printf("ESP32-C6 ePaper tracker booting...\n");
   log_wakeup_cause();
+  start_awake_cap();
 
   // Latch the battery power hold first, so the board stays on when running
   // from battery even if nothing else below succeeds.
@@ -341,12 +438,15 @@ extern "C" void app_main(void) {
   // A timer wake before the refresh is due only blinks the low battery LED.
   // Any other wake (PWR button, power on, reset, flashing) always refreshes.
   const bool timer_wake = esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_TIMER);
+  bool tonight = false;
   if (!timer_wake || time(nullptr) >= next_refresh) {
-    full_refresh(battery_pct);
+    tonight = full_refresh(battery_pct);
   }
 
   if (battery_low) {
-    blink_low_battery_led();
+    blink_led("Battery low");
+  } else if (tonight && BIN_NIGHT_LED) {
+    blink_led("Bin night");
   }
 
   stay_awake_while_usb_connected();

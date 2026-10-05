@@ -129,11 +129,12 @@ void addPickupDay(lv_obj_t* screen, const BinScreenData& data) {
   lv_obj_align(banner, LV_ALIGN_TOP_MID, 0, 38);
 
   lv_obj_t* label;
-  if (data.isToday) {
-    // Collection day: white text on a solid black strip
+  if (data.isToday || data.isTonight) {
+    // Evening before (put the bins out) or the pickup day itself: white text
+    // on a solid black strip
     lv_obj_set_style_bg_color(banner, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(banner, LV_OPA_COVER, 0);
-    label = addLabel(banner, "TODAY", &font_bold_40);
+    label = addLabel(banner, data.isToday ? "TODAY" : "TONIGHT", &font_bold_32);
     lv_obj_set_style_text_color(label, lv_color_white(), 0);
   } else {
     char text[12];
