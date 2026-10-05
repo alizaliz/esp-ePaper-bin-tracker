@@ -2,6 +2,8 @@
 
 Battery-powered firmware for the Waveshare ESP32-C6 1.54" e-Paper development board. It shows the next Auckland Council rubbish, food scraps and recycling collection days.
 
+![Labelled diagram of the screen and the board's controls](docs/images/diagram.svg)
+
 ## Hardware
 [Waveshare ESP32-C6 1.54" e-Paper AIoT Development Board](https://www.waveshare.com/esp32-c6-epaper-1.54.htm) ([docs](https://docs.waveshare.com/ESP32-C6-ePaper-1.54), [examples and schematic](https://github.com/waveshareteam/ESP32-C6-ePaper-1.54))
 
@@ -68,6 +70,13 @@ If the first build after a clean, or after deleting `sdkconfig.esp32-c6-devkitc-
 ## Display and graphics
 
 ### Screen layout
+| Upcoming pickup | Pickup day | Low battery | Offline |
+| :---: | :---: | :---: | :---: |
+| ![Upcoming pickup](docs/images/screen_upcoming.png) | ![TODAY on the pickup day](docs/images/screen_today.png) | ![Low battery](docs/images/screen_low_battery.png) | ![Offline, with no readings](docs/images/screen_offline.png) |
+| Rubbish and food scraps go out on Thursday; recycling doesn't | All three bins go out today | Battery almost empty; the green LED also blinks | No Wi-Fi and no sensor reading |
+
+These are host previews, rendered by the same layout code and fonts as the firmware.
+
 - **Top row, centred:** Wi-Fi status, temperature (°C), relative humidity (%) and battery charge.
   - The Wi-Fi icon shows whether this refresh got online. A slash through it means the connection failed, so the schedule shown is the last one fetched.
   - Temperature and humidity are the current outdoor weather from [Open-Meteo](https://open-meteo.com) for `WEATHER_LATITUDE`/`WEATHER_LONGITUDE`. If Wi-Fi or the request fails, the onboard SHTC3 sensor (indoor) is used instead, and if that fails too it shows `--`. Set `USE_ONLINE_WEATHER` to `0` to always use the sensor.
@@ -106,7 +115,7 @@ LVGL's PNG decoder unpacks the image to 32-bit colour in RAM while drawing, so k
 For the sharpest results with either setting, design icons in pure black and white.
 
 ### Previewing the screen on a computer
-`tools/preview/run.sh` renders the screen layout to PNGs in `tools/preview/out/`, using the same LVGL code, fonts and black and white conversion as the firmware. It covers an upcoming pickup, `TODAY`, the widest possible date and readings, a low battery, and offline with no readings. It also prints a warning if anything is drawn off screen. Use it to check a layout change before flashing. It needs a C/C++ compiler and zlib, which macOS includes, and LVGL in `managed_components/`, so run `pio run` once first. The first run compiles LVGL and takes about a minute.
+`tools/preview/run.sh` renders the screen layout to PNGs in `tools/preview/out/`, using the same LVGL code, fonts and black and white conversion as the firmware. It covers an upcoming pickup, `TODAY`, the widest possible date and readings, a low battery, and offline with no readings. It also prints a warning if anything is drawn off screen. Use it to check a layout change before flashing. Afterwards, run `python3 tools/docs/make_images.py` to refresh the README images in `docs/images/`, including the labelled diagram. It needs a C/C++ compiler and zlib, which macOS includes, and LVGL in `managed_components/`, so run `pio run` once first. The first run compiles LVGL and takes about a minute.
 
 ## Buttons
 - **PWR (GPIO2):** a short press restarts the device and runs a full refresh (Wi-Fi, fetch, redraw). It works at any time, including from deep sleep: GPIO2 is one of the ESP32-C6's low-power GPIOs, so it can wake the chip. On battery, PWR also turns the board on, which is handled in hardware. Waking from deep sleep restarts the firmware from `app_main`; while the board is awake on USB, a press calls `esp_restart()`.
@@ -171,6 +180,7 @@ This relies on the page's HTML, not a published API, so a Council website redesi
 | `components/fonts/` | Generated LVGL fonts (Montserrat Bold, Font Awesome icons) |
 | `tools/fonts/generate.sh` | Regenerates `components/fonts/` |
 | `tools/preview/` | Host preview of the screen layout |
+| `tools/docs/make_images.py`, `docs/images/` | README images: screen previews and the labelled diagram |
 | `src/epd_ssd1681.*` | e-Paper panel driver (SPI) |
 | `src/board_power.*` | Shared I2C bus and TCA9554 outputs (panel power, battery hold, LED) |
 | `src/board_pins.h` | Board pin map |
