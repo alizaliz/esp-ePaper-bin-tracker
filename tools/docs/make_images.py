@@ -62,18 +62,21 @@ def build_diagram():
         parts.append(label(x, top, title, sub, "middle"))
 
     # Left side
-    x, y = at(37, 65)
-    parts.append(leader(240, y, x - 6, y))
-    parts.append(label(232, y - 4, "Next pickup day", "black TODAY strip on the day", "end"))
-
-    x, y = at(11, 130)
+    x, y = at(8, 84)
     parts.append(leader(240, y, x - 4, y))
     parts.append(label(232, y - 4, "Bins", "rubbish, recycling, food scraps", "end"))
 
-    # Right side
-    x, y = at(188, 174)
-    parts.append(leader(720, y, x - 8, y))
-    parts.append(label(728, y - 4, "Tick or cross", "out on the pickup day, or not"))
+    x, y = at(37, 167)
+    parts.append(leader(240, y, x - 6, y))
+    parts.append(label(232, y - 4, "Next pickup day", "TONIGHT, then TODAY, on a black strip", "end"))
+
+    # Right side: an elbow through the gap under the icons to the slash on
+    # the recycling bin
+    x, y = at(112, 100)
+    _, gap_y = at(0, 128)
+    parts.append(f'<polyline points="720,{gap_y} {x},{gap_y} {x},{y + 4}" fill="none" class="l"/>')
+    parts.append(f'<circle cx="{x}" cy="{y + 4}" r="4" class="d"/>')
+    parts.append(label(728, gap_y - 4, "Slashed bin", "not collected this pickup"))
 
     # Bin names under the columns
     for cx, name in [(33.5, "Rubbish"), (99.5, "Recycling"), (165.5, "Food scraps")]:

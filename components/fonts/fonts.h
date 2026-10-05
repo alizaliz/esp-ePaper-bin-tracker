@@ -9,9 +9,8 @@ extern "C" {
 LV_FONT_DECLARE(font_bold_40)  // Montserrat Bold: A-Z, 0-9, space
 LV_FONT_DECLARE(font_bold_32)  // Montserrat Bold: TODAY, TONIGHT
 LV_FONT_DECLARE(font_bold_18)  // Montserrat Bold: 0-9 - ° C %
-LV_FONT_DECLARE(icons_52)      // Font Awesome: bin icons
+LV_FONT_DECLARE(icons_60)      // Font Awesome: bin icons
 LV_FONT_DECLARE(icons_22)      // Font Awesome: wifi, thermometer, droplet
-LV_FONT_DECLARE(icons_30)      // Font Awesome: tick, cross
 #ifdef __cplusplus
 }
 #endif
@@ -23,5 +22,3 @@ LV_FONT_DECLARE(icons_30)      // Font Awesome: tick, cross
 #define ICON_WIFI "\xEF\x87\xAB"        // U+F1EB
 #define ICON_THERMOMETER "\xEF\x8B\x89" // U+F2C9
 #define ICON_DROPLET "\xEF\x81\x83"     // U+F043
-#define ICON_CHECK "\xEF\x80\x8C"       // U+F00C
-#define ICON_XMARK "\xEF\x80\x8D"       // U+F00D

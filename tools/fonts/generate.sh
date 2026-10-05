@@ -37,15 +37,11 @@ conv --font "$MONTSERRAT" --size 18 --symbols "0123456789-°C% " \
   --lv-font-name font_bold_18 -o "$OUT/font_bold_18.c"
 
 # Bin icons: trash-can, recycle, apple-whole
-conv --font "$FA" --size 52 --range 0xF2ED,0xF1B8,0xF5D1 \
-  --lv-font-name icons_52 -o "$OUT/icons_52.c"
+conv --font "$FA" --size 60 --range 0xF2ED,0xF1B8,0xF5D1 \
+  --lv-font-name icons_60 -o "$OUT/icons_60.c"
 
 # Top row icons: wifi, temperature-half, droplet
 conv --font "$FA" --size 22 --range 0xF1EB,0xF2C9,0xF043 \
   --lv-font-name icons_22 -o "$OUT/icons_22.c"
-
-# Collection marks: check, xmark
-conv --font "$FA" --size 30 --range 0xF00C,0xF00D \
-  --lv-font-name icons_30 -o "$OUT/icons_30.c"
 
 echo "Fonts written to $OUT/"
