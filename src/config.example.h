@@ -12,8 +12,8 @@
 // The results page URL ends in /<address ID>.html.
 #define COUNCIL_ADDRESS_ID "12342478585"
 
-// 1: show the outdoor temperature and humidity from Open-Meteo, falling back
-// to the onboard sensor if Wi-Fi or the request fails. 0: always use the
+// 1: show today's average outdoor temperature and humidity from Open-Meteo,
+// falling back to the onboard sensor if Wi-Fi or the request fails. 0: always use the
 // onboard sensor (indoor readings).
 #define USE_ONLINE_WEATHER 1
 

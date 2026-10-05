@@ -304,10 +304,11 @@ static Climate read_sensor(void) {
 
 static Climate fetch_weather(void) {
   Climate climate = {};
-  if (weather::fetchCurrent(WEATHER_LATITUDE, WEATHER_LONGITUDE, climate.temperatureC,
-                            climate.humidityPct) == ESP_OK) {
+  if (weather::fetchDailyMean(WEATHER_LATITUDE, WEATHER_LONGITUDE, climate.temperatureC,
+                              climate.humidityPct) == ESP_OK) {
     climate.valid = true;
-    printf("Weather: %.1f C, %.1f %%\n", climate.temperatureC, climate.humidityPct);
+    printf("Weather (today's mean): %.1f C, %.1f %%\n", climate.temperatureC,
+           climate.humidityPct);
   } else {
     printf("Failed to fetch the weather\n");
   }

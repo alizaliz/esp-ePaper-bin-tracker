@@ -16,12 +16,13 @@ constexpr size_t MAX_BYTES = 4096;  // the response is about 400 bytes
 
 }  // namespace
 
-esp_err_t fetchCurrent(double latitude, double longitude, float& temperature_c,
-                       float& humidity_pct) {
-  char url[192];
+esp_err_t fetchDailyMean(double latitude, double longitude, float& temperature_c,
+                         float& humidity_pct) {
+  char url[256];
   snprintf(url, sizeof(url),
            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
-           "&current=temperature_2m,relative_humidity_2m",
+           "&daily=temperature_2m_mean,relative_humidity_2m_mean"
+           "&timezone=Pacific%%2FAuckland&forecast_days=1",
            latitude, longitude);
 
   std::string body;
@@ -32,12 +33,15 @@ esp_err_t fetchCurrent(double latitude, double longitude, float& temperature_c,
                                  }),
                       TAG, "request failed");
 
-  // {"current":{"temperature_2m":14.8,"relative_humidity_2m":60,...},...}
+  // {"daily":{"time":["2026-10-05"],"temperature_2m_mean":[12.2],
+  //  "relative_humidity_2m_mean":[74]},...}
   cJSON* root = cJSON_Parse(body.c_str());
   ESP_RETURN_ON_FALSE(root != nullptr, ESP_ERR_INVALID_RESPONSE, TAG, "invalid JSON");
-  const cJSON* current = cJSON_GetObjectItem(root, "current");
-  const cJSON* temperature = cJSON_GetObjectItem(current, "temperature_2m");
-  const cJSON* humidity = cJSON_GetObjectItem(current, "relative_humidity_2m");
+  const cJSON* daily = cJSON_GetObjectItem(root, "daily");
+  const cJSON* temperature =
+      cJSON_GetArrayItem(cJSON_GetObjectItem(daily, "temperature_2m_mean"), 0);
+  const cJSON* humidity =
+      cJSON_GetArrayItem(cJSON_GetObjectItem(daily, "relative_humidity_2m_mean"), 0);
   const bool ok = cJSON_IsNumber(temperature) && cJSON_IsNumber(humidity);
   if (ok) {
     temperature_c = static_cast<float>(temperature->valuedouble);

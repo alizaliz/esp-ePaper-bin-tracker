@@ -84,7 +84,7 @@ These are host previews, rendered by the same layout code and fonts as the firmw
 
 - **Top row, centred:** Wi-Fi status, temperature (°C), relative humidity (%) and battery charge.
   - The Wi-Fi icon shows whether this refresh got online. A slash through it means the connection failed, so the schedule shown is the last one fetched.
-  - Temperature and humidity are the current outdoor weather from [Open-Meteo](https://open-meteo.com) for `WEATHER_LATITUDE`/`WEATHER_LONGITUDE`. If Wi-Fi or the request fails, the onboard SHTC3 sensor (indoor) is used instead, and if that fails too it shows `--`. Set `USE_ONLINE_WEATHER` to `0` to always use the sensor.
+  - Temperature and humidity are today's average outdoor weather (daily mean, Auckland time) from [Open-Meteo](https://open-meteo.com) for `WEATHER_LATITUDE`/`WEATHER_LONGITUDE`. The board refreshes just after midnight, so a reading of the current conditions would show the overnight low all day. If Wi-Fi or the request fails, the onboard SHTC3 sensor (indoor) is used instead, and if that fails too it shows `--`. Set `USE_ONLINE_WEATHER` to `0` to always use the sensor.
   - The sensor is read first thing on wake, before Wi-Fi and the display warm the board. If its readings run warm, set `TEMPERATURE_OFFSET_C`.
   - The battery glyph's fill is proportional to the charge. It's updated with each redraw, so once a day.
 - **Middle:** three bin icons (rubbish, recycling, food scraps). A bin that isn't collected on the next pickup day has a slash through it.
