@@ -54,7 +54,46 @@ void addWifiStatus(lv_obj_t* parent, bool connected) {
   }
 }
 
-// Top row, centred: Wi-Fi status, temperature, humidity.
+// Battery outline whose fill is proportional to the charge. Drawn rather than
+// taken from Font Awesome, which only has five fixed levels.
+void addBattery(lv_obj_t* parent, bool known, int percent) {
+  constexpr int BODY_W = 22;
+  constexpr int BODY_H = 12;
+  constexpr int BORDER = 2;
+  constexpr int GAP = 1;  // white gap between the outline and the fill
+
+  lv_obj_t* box = lv_obj_create(parent);
+  lv_obj_remove_style_all(box);
+  lv_obj_set_size(box, BODY_W + 3, BODY_H);
+
+  lv_obj_t* body = lv_obj_create(box);
+  lv_obj_remove_style_all(body);
+  lv_obj_set_size(body, BODY_W, BODY_H);
+  lv_obj_set_style_border_color(body, lv_color_black(), 0);
+  lv_obj_set_style_border_width(body, BORDER, 0);
+  lv_obj_set_style_border_opa(body, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(body, 2, 0);
+
+  lv_obj_t* nub = lv_obj_create(box);
+  lv_obj_remove_style_all(nub);
+  lv_obj_set_size(nub, 3, 6);
+  lv_obj_set_pos(nub, BODY_W, (BODY_H - 6) / 2);
+  lv_obj_set_style_bg_color(nub, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(nub, LV_OPA_COVER, 0);
+
+  if (!known) return;
+  constexpr int INNER_W = BODY_W - 2 * (BORDER + GAP);
+  const int fill_w = (std::clamp(percent, 0, 100) * INNER_W + 50) / 100;
+  if (fill_w == 0) return;
+  lv_obj_t* fill = lv_obj_create(box);
+  lv_obj_remove_style_all(fill);
+  lv_obj_set_size(fill, fill_w, BODY_H - 2 * (BORDER + GAP));
+  lv_obj_set_pos(fill, BORDER + GAP, BORDER + GAP);
+  lv_obj_set_style_bg_color(fill, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
+}
+
+// Top row, centred: Wi-Fi status, temperature, humidity, battery.
 void addStatusBar(lv_obj_t* screen, const BinScreenData& data) {
   char temperature[12];
   char humidity[8];
@@ -73,10 +112,11 @@ void addStatusBar(lv_obj_t* screen, const BinScreenData& data) {
   lv_obj_set_size(bar, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_column(bar, 12, 0);
+  lv_obj_set_style_pad_column(bar, 8, 0);
   addWifiStatus(bar, data.wifiConnected);
   addReading(bar, ICON_THERMOMETER, temperature);
   addReading(bar, ICON_DROPLET, humidity);
+  addBattery(bar, data.hasBattery, data.batteryPct);
   lv_obj_align(bar, LV_ALIGN_TOP_MID, 0, 5);
 }
 

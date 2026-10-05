@@ -16,6 +16,9 @@ struct BinScreenData {
 
   bool wifiConnected = false;  // whether this refresh got online
 
+  bool hasBattery = false;  // false if the battery voltage couldn't be read
+  int batteryPct = 0;
+
   bool hasClimate = false;  // false if no temperature/humidity source worked
   int temperatureC = 0;
   int humidityPct = 0;

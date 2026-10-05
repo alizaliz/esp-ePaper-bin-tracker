@@ -14,6 +14,7 @@
 #include "freertos/task.h"
 
 #include "auckland_council_client.h"
+#include "battery.h"
 #include "board_power.h"
 #include "collection_types.h"
 #include "config.h"
@@ -29,6 +30,10 @@ static const char* TIMEZONE = "NZST-12NZDT,M9.5.0,M4.1.0/3";
 static const int WAKE_HOUR = 0;
 static const int WAKE_MINUTE = 5;
 
+// While the battery is low, wake this often to blink the LED.
+static const int LOW_BATTERY_BLINK_INTERVAL_S = 10 * 60;
+static const int LOW_BATTERY_BLINK_DURATION_S = 10;
+
 static const int WIFI_TIMEOUT_MS = 15000;
 static const int NTP_TIMEOUT_MS = 10000;
 
@@ -42,6 +47,11 @@ struct Schedule {
   bool foodScraps;
 };
 RTC_DATA_ATTR static Schedule last_schedule = {};
+
+// When the next full refresh (Wi-Fi, fetch, redraw) is due, as a time()
+// value. Low battery wakes in between only blink the LED.
+RTC_DATA_ATTR static time_t next_refresh = 0;
+RTC_DATA_ATTR static bool battery_low = false;
 
 struct Climate {
   bool valid;
@@ -77,8 +87,8 @@ static int reference_year(void) {
   return atoi(__DATE__ + strlen(__DATE__) - 4);  // "Mmm dd yyyy"
 }
 
-// Seconds until the next WAKE_HOUR:WAKE_MINUTE local time.
-static uint64_t seconds_until_next_wake(void) {
+// The next WAKE_HOUR:WAKE_MINUTE local time after now.
+static time_t next_wake_time(void) {
   const time_t now = time(nullptr);
   struct tm wake;
   localtime_r(&now, &wake);
@@ -92,7 +102,15 @@ static uint64_t seconds_until_next_wake(void) {
     wake.tm_isdst = -1;
     next = mktime(&wake);
   }
-  return (uint64_t)(next - now);
+  return next;
+}
+
+// When the refresh after this one should happen.
+static time_t schedule_next_refresh(void) {
+  if (clock_is_set()) return next_wake_time();
+  // Without the time of day, fall back to a fixed interval. time() still
+  // counts up through deep sleep even when it hasn't been set.
+  return time(nullptr) + (time_t)REFRESH_INTERVAL_HOURS * 60 * 60;
 }
 
 // Deep sleep turns off the USB port, so a sleeping board can't be flashed or
@@ -112,16 +130,51 @@ static void stay_awake_while_usb_connected(void) {
 }
 
 static void enter_deep_sleep(void) {
-  uint64_t sleep_s;
-  if (clock_is_set()) {
-    sleep_s = seconds_until_next_wake();
-  } else {
-    // Without the time of day, fall back to a fixed interval.
-    sleep_s = (uint64_t)REFRESH_INTERVAL_HOURS * 60ULL * 60ULL;
+  const time_t now = time(nullptr);
+  int64_t sleep_s = next_refresh > now ? next_refresh - now : 60;
+  if (battery_low && sleep_s > LOW_BATTERY_BLINK_INTERVAL_S) {
+    sleep_s = LOW_BATTERY_BLINK_INTERVAL_S;
   }
-  printf("Deep sleeping for %llu minutes\n", sleep_s / 60);
-  esp_sleep_enable_timer_wakeup(sleep_s * 1000000ULL);
+  printf("Deep sleeping for %lld minutes\n", sleep_s / 60);
+  esp_sleep_enable_timer_wakeup((uint64_t)sleep_s * 1000000ULL);
   esp_deep_sleep_start();
+}
+
+// Reads the battery and updates battery_low, with 5% hysteresis so it doesn't
+// flip back and forth around the threshold. Returns the charge, or -1.
+static int check_battery(void) {
+  float volts = 0;
+  if (battery::readVoltage(volts) != ESP_OK) {
+    printf("Failed to read the battery voltage\n");
+    return -1;
+  }
+  const int percent = battery::percentFromVoltage(volts);
+  if (percent < LOW_BATTERY_PERCENT) {
+    battery_low = true;
+  } else if (percent > LOW_BATTERY_PERCENT + 5) {
+    battery_low = false;
+  }
+  printf("Battery: %.2f V, %d %%%s\n", volts, percent, battery_low ? " (low)" : "");
+  return percent;
+}
+
+// Blinks the green LED once a second for LOW_BATTERY_BLINK_DURATION_S.
+// Light sleep between toggles keeps the cost of these wakes down; the
+// expander holds the LED state meanwhile. Light sleep drops USB, so plain
+// delays are used while a computer is connected.
+static void blink_low_battery_led(void) {
+  printf("Battery low: blinking the LED\n");
+  const bool usb = usb_serial_jtag_is_connected();
+  for (int i = 0; i < LOW_BATTERY_BLINK_DURATION_S * 2; ++i) {
+    board_power::setLed(i % 2 == 0);
+    if (usb) {
+      vTaskDelay(pdMS_TO_TICKS(500));
+    } else {
+      esp_sleep_enable_timer_wakeup(500 * 1000);
+      esp_light_sleep_start();
+    }
+  }
+  board_power::setLed(false);
 }
 
 // Onboard SHTC3 sensor. Read straight after waking, before Wi-Fi and the
@@ -179,7 +232,7 @@ static bool fetch_schedule(Schedule& schedule) {
   return true;
 }
 
-static void refresh_display(bool online, const Climate& climate) {
+static void refresh_display(bool online, const Climate& climate, int battery_pct) {
   if (!last_schedule.valid) {
     printf("No schedule yet; leaving the display unchanged\n");
     return;
@@ -192,6 +245,8 @@ static void refresh_display(bool online, const Climate& climate) {
   data.recycling = last_schedule.recycling;
   data.foodScraps = last_schedule.foodScraps;
   data.wifiConnected = online;
+  data.hasBattery = battery_pct >= 0;
+  data.batteryPct = battery_pct;
   data.hasClimate = climate.valid;
   data.temperatureC = (int)lroundf(climate.temperatureC);
   data.humidityPct = (int)lroundf(climate.humidityPct);
@@ -201,19 +256,9 @@ static void refresh_display(bool online, const Climate& climate) {
   }
 }
 
-extern "C" void app_main(void) {
-  printf("ESP32-C6 ePaper tracker booting...\n");
-  log_wakeup_cause();
-
-  // Latch the battery power hold first, so the board stays on when running
-  // from battery even if nothing else below succeeds.
-  if (board_power::init() != ESP_OK) {
-    printf("Board power init failed\n");
-  }
-
-  setenv("TZ", TIMEZONE, 1);
-  tzset();
-
+// Reads the sensor, goes online for the clock, weather and schedule, and
+// redraws the screen.
+static void full_refresh(int battery_pct) {
   const Climate sensor = read_sensor();
   Climate weather = {};
 
@@ -242,7 +287,36 @@ extern "C" void app_main(void) {
     printf("Today is %04d-%02d-%02d\n", today.year, today.month, today.day);
   }
 
-  refresh_display(online, weather.valid ? weather : sensor);
+  refresh_display(online, weather.valid ? weather : sensor, battery_pct);
+  next_refresh = schedule_next_refresh();
+}
+
+extern "C" void app_main(void) {
+  printf("ESP32-C6 ePaper tracker booting...\n");
+  log_wakeup_cause();
+
+  // Latch the battery power hold first, so the board stays on when running
+  // from battery even if nothing else below succeeds.
+  if (board_power::init() != ESP_OK) {
+    printf("Board power init failed\n");
+  }
+
+  setenv("TZ", TIMEZONE, 1);
+  tzset();
+
+  const int battery_pct = check_battery();
+
+  // A timer wake before the refresh is due only blinks the low battery LED.
+  // Any other wake (power on, reset, flashing) always refreshes.
+  const bool timer_wake = esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_TIMER);
+  if (!timer_wake || time(nullptr) >= next_refresh) {
+    full_refresh(battery_pct);
+  }
+
+  if (battery_low) {
+    blink_low_battery_led();
+  }
+
   stay_awake_while_usb_connected();
   enter_deep_sleep();
 }

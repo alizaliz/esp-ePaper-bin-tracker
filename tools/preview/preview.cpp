@@ -74,6 +74,16 @@ void render(lv_display_t* display, const BinScreenData& data, const std::string&
   lv_screen_load(screen);
   lv_refr_now(display);
 
+  // Warn about anything drawn outside the screen.
+  for (uint32_t i = 0; i < lv_obj_get_child_count(screen); ++i) {
+    lv_area_t a;
+    lv_obj_get_coords(lv_obj_get_child(screen, i), &a);
+    if (a.x1 < 0 || a.y1 < 0 || a.x2 >= WIDTH || a.y2 >= HEIGHT) {
+      printf("WARNING: %s: element %u at (%d,%d)-(%d,%d) is off screen\n", path.c_str(),
+             (unsigned)i, (int)a.x1, (int)a.y1, (int)a.x2, (int)a.y2);
+    }
+  }
+
   std::vector<uint8_t> frame(WIDTH * HEIGHT / 8);
   mono::threshold(grey.data(), frame.data(), WIDTH, HEIGHT);
   writePng(path, frame, 2);
@@ -97,6 +107,8 @@ int main(int argc, char** argv) {
   upcoming.rubbish = true;
   upcoming.foodScraps = true;
   upcoming.wifiConnected = true;
+  upcoming.hasBattery = true;
+  upcoming.batteryPct = 70;
   upcoming.hasClimate = true;
   upcoming.temperatureC = 21;
   upcoming.humidityPct = 54;
@@ -111,7 +123,12 @@ int main(int argc, char** argv) {
   widest.pickup = {2026, 9, 30};
   widest.temperatureC = -9;
   widest.humidityPct = 99;
+  widest.batteryPct = 100;
   render(display, widest, out + "/widest.png");
+
+  BinScreenData low = upcoming;  // low battery
+  low.batteryPct = 8;
+  render(display, low, out + "/low_battery.png");
 
   BinScreenData offline = upcoming;  // no Wi-Fi and no sensor reading
   offline.wifiConnected = false;

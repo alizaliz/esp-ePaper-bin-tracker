@@ -68,10 +68,11 @@ If the first build after a clean, or after deleting `sdkconfig.esp32-c6-devkitc-
 ## Display and graphics
 
 ### Screen layout
-- **Top row, centred:** Wi-Fi status, temperature (°C) and relative humidity (%).
+- **Top row, centred:** Wi-Fi status, temperature (°C), relative humidity (%) and battery charge.
   - The Wi-Fi icon shows whether this refresh got online. A slash through it means the connection failed, so the schedule shown is the last one fetched.
   - Temperature and humidity are the current outdoor weather from [Open-Meteo](https://open-meteo.com) for `WEATHER_LATITUDE`/`WEATHER_LONGITUDE`. If Wi-Fi or the request fails, the onboard SHTC3 sensor (indoor) is used instead, and if that fails too it shows `--`. Set `USE_ONLINE_WEATHER` to `0` to always use the sensor.
   - The sensor is read first thing on wake, before Wi-Fi and the display warm the board. If its readings run warm, set `TEMPERATURE_OFFSET_C`.
+  - The battery glyph's fill is proportional to the charge. It's updated with each redraw, so once a day.
 - **Middle:** the next pickup day in bold, e.g. `THU 8`. On the pickup day itself this becomes `TODAY` in white on a black strip.
 - **Bottom:** three bin icons (rubbish, recycling, food scraps), each with a tick if it goes out on that pickup day or a cross if it doesn't.
 
@@ -105,7 +106,12 @@ LVGL's PNG decoder unpacks the image to 32-bit colour in RAM while drawing, so k
 For the sharpest results with either setting, design icons in pure black and white.
 
 ### Previewing the screen on a computer
-`tools/preview/run.sh` renders the screen layout to PNGs in `tools/preview/out/`, using the same LVGL code, fonts and black and white conversion as the firmware. It covers four cases: an upcoming pickup, `TODAY`, the widest possible date and readings, and a failed sensor read. Use it to check a layout change before flashing. It needs a C/C++ compiler and zlib, which macOS includes, and LVGL in `managed_components/`, so run `pio run` once first. The first run compiles LVGL and takes about a minute.
+`tools/preview/run.sh` renders the screen layout to PNGs in `tools/preview/out/`, using the same LVGL code, fonts and black and white conversion as the firmware. It covers an upcoming pickup, `TODAY`, the widest possible date and readings, a low battery, and offline with no readings. It also prints a warning if anything is drawn off screen. Use it to check a layout change before flashing. It needs a C/C++ compiler and zlib, which macOS includes, and LVGL in `managed_components/`, so run `pio run` once first. The first run compiles LVGL and takes about a minute.
+
+## Battery
+The battery voltage is read on GPIO0 through the board's 200k/200k divider, using ESP-IDF's calibrated ADC, averaged over 16 samples. It's converted to a charge percentage with a typical lithium polymer discharge curve (4.20V = 100%, 3.70V ≈ 31%, 3.30V = 0%). Readings while charging run high, and with no battery connected the charger's output on the battery pin reads as about 4.2V, so the glyph shows full while USB is plugged in. The board's red LED is driven by the charger chip and shows charging. It isn't connected to the ESP32-C6, so the firmware can't tell when the battery is charging.
+
+**Low battery reminder:** below `LOW_BATTERY_PERCENT` (10% by default), the board wakes every 10 minutes and blinks the green LED (TCA9554 EXIO4, active low) once a second for 10 seconds. These wakes don't use Wi-Fi or redraw the screen; the daily refresh still happens on schedule. Light sleep between blinks keeps their cost down. Blinking stops once the charge is back above `LOW_BATTERY_PERCENT` + 5%, so it doesn't flicker on and off around the threshold.
 
 ## Power and deep sleep
 The firmware does one pass each time the device wakes, then goes back to sleep:
@@ -114,7 +120,10 @@ The firmware does one pass each time the device wakes, then goes back to sleep:
 2. Read the onboard temperature and humidity sensor
 3. Connect to Wi-Fi (15 second timeout), set the clock from NTP, fetch the weather and the collection schedule, then switch Wi-Fi off
 4. Power the panel on (TCA9554 EXIO0), redraw it, put it into its own deep sleep, and power it off again. If the fetch failed, the last fetched schedule (kept in RTC memory) is redrawn with fresh readings. If there has never been a successful fetch, the panel is left alone.
-5. Put the ESP32-C6 into deep sleep until 00:05 Auckland time, so `TODAY` is shown for the whole pickup day. If the clock hasn't been set, it sleeps for `REFRESH_INTERVAL_HOURS` instead.
+5. If the battery is low, blink the LED for 10 seconds.
+6. Put the ESP32-C6 into deep sleep until the next refresh at 00:05 Auckland time, so `TODAY` is shown for the whole pickup day. If the clock hasn't been set, the next refresh is `REFRESH_INTERVAL_HOURS` away instead. While the battery is low it wakes every 10 minutes to blink, then sleeps again until the refresh is due.
+
+Power on, reset and flashing always run a full refresh.
 
 The battery power hold (TCA9554 EXIO5) is driven high on every wake. The expander's registers are written directly and never reset, because the expander stays powered through deep sleep. A reset would briefly release the hold pin and could cut power on battery.
 
@@ -151,11 +160,12 @@ This relies on the page's HTML, not a published API, so a Council website redesi
 | `src/ui/bin_screen.*` | Screen layout (plain LVGL, previewable on a computer) |
 | `src/ui/mono_convert.*` | Greyscale to 1-bit conversion (threshold or dithering) |
 | `src/shtc3.*` | SHTC3 temperature and humidity sensor driver |
+| `src/battery.*` | Battery voltage and charge percentage |
 | `components/fonts/` | Generated LVGL fonts (Montserrat Bold, Font Awesome icons) |
 | `tools/fonts/generate.sh` | Regenerates `components/fonts/` |
 | `tools/preview/` | Host preview of the screen layout |
 | `src/epd_ssd1681.*` | e-Paper panel driver (SPI) |
-| `src/board_power.*` | Shared I2C bus and TCA9554 power switching (panel power, battery hold) |
+| `src/board_power.*` | Shared I2C bus and TCA9554 outputs (panel power, battery hold, LED) |
 | `src/board_pins.h` | Board pin map |
 | `src/assets.h`, `src/assets/` | Embedded PNG images |
 | `src/idf_component.yml` | ESP-IDF component dependencies (LVGL, cJSON) |
@@ -171,8 +181,7 @@ Working and tested on hardware: Wi-Fi, NTP clock sync, the Council schedule fetc
 
 Not yet tested on hardware: waking at 00:05 and showing `TODAY` on a pickup day. Both depend on the date, so they'll show up on the next pickup.
 
-Still to do:
-- Battery voltage reading
+Also tested on hardware: the battery reading and the low battery LED blink (by temporarily raising the threshold). Not yet tested: a real low battery over several 10-minute wakes.
 
 ## Licences
 - Project code: MIT (see `LICENSE`)

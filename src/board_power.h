@@ -14,6 +14,9 @@ esp_err_t init();
 // Switches the e-Paper panel's supply on or off.
 esp_err_t setEpdPower(bool on);
 
+// Switches the green status LED on or off.
+esp_err_t setLed(bool on);
+
 // The board's shared I2C bus, or nullptr before init().
 i2c_master_bus_handle_t i2cBus();
 

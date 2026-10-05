@@ -39,3 +39,8 @@
 // flashed and monitored without entering download mode. Set to 0 to test real
 // deep sleep while plugged in. Chargers and power banks never keep it awake.
 #define STAY_AWAKE_ON_USB 1
+
+// Below this charge (%), the green LED blinks for 10 seconds every 10 minutes
+// as a reminder to charge. It stops once the charge is back above
+// LOW_BATTERY_PERCENT + 5.
+#define LOW_BATTERY_PERCENT 10
