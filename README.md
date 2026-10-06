@@ -24,6 +24,8 @@ A battery-powered e-paper display that shows your next Auckland Council rubbish,
 
 Each [release](https://github.com/alizaliz/esp-ePaper-bin-tracker/releases) includes `bin-tracker-<version>-full.bin`, a complete image to flash at address `0x0`. In Chrome or Edge, open [Espressif's web flasher](https://espressif.github.io/esptool-js/), connect to the board, add the file at address `0x0` and click **Program**. Then skip to step 3.
 
+The full image erases the settings saved on the board, so use it to set up a board from scratch. To update a board that's already set up, flash `bin-tracker-<version>-app.bin` at address `0x10000` instead, which keeps its settings.
+
 </details>
 
 ### 1. Install the tools

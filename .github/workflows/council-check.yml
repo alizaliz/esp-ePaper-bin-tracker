@@ -20,12 +20,28 @@ jobs:
         env:
           ASSESSMENT_NUMBER: ${{ secrets.COUNCIL_CHECK_ASSESSMENT_NUMBER }}
         run: |
+          # Strip spaces or a trailing newline pasted into the secret.
+          ASSESSMENT_NUMBER=$(printf '%s' "$ASSESSMENT_NUMBER" | tr -d '[:space:]')
           if [ -z "$ASSESSMENT_NUMBER" ]; then
             echo "::error::Set the COUNCIL_CHECK_ASSESSMENT_NUMBER repository secret"
             exit 1
           fi
-          curl -sSf --max-time 30 -A "esp-ePaper-bin-tracker" -o page.html \
-            "https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days/${ASSESSMENT_NUMBER}.html"
+          URL="https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days/${ASSESSMENT_NUMBER}.html"
+          # The Council's CDN sometimes refuses requests for a while (HTTP 406
+          # or 403), so retry a few times before giving up. The URL isn't
+          # printed, so the assessment number stays out of the logs.
+          for attempt in 1 2 3 4; do
+            status=$(curl -s --max-time 30 -A "esp-ePaper-bin-tracker" -o page.html -w '%{http_code}' "$URL" || echo "000")
+            echo "Attempt $attempt: HTTP $status"
+            [ "$status" = "200" ] && exit 0
+            [ "$attempt" -lt 4 ] && sleep 60
+          done
+          case "$status" in
+            404) echo "::error::Page not found (HTTP 404). Check the assessment number in the secret." ;;
+            403|406|429) echo "::error::The Council website refused the request (HTTP $status). This is usually temporary; if it keeps happening, it may be blocking GitHub's servers." ;;
+            *) echo "::error::Couldn't fetch the page (HTTP $status)." ;;
+          esac
+          exit 1
 
       - name: Check it parses
         env:
