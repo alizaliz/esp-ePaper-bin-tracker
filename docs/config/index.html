@@ -120,6 +120,25 @@
 
   <div id="message"></div>
 
+  <fieldset id="firmwareFields" disabled>
+    <div class="card">
+      <h2>Firmware</h2>
+      <div class="status">
+        <span id="firmwareVersion" style="flex:1">Version: unknown</span>
+        <button type="button" id="checkUpdate">Check for updates now</button>
+      </div>
+      <label class="check"><input type="checkbox" id="autoUpdate"> Install updates automatically, overnight</label>
+      <div class="hint">Updates come from this project's GitHub releases. If new firmware fails, the board goes back to the previous version.</div>
+    </div>
+  </fieldset>
+
+  <div class="card">
+    <details>
+      <summary>Device log</summary>
+      <div id="log"></div>
+    </details>
+  </div>
+
   <form id="form" autocomplete="off">
     <fieldset id="fields" disabled>
       <div class="card">
@@ -181,16 +200,6 @@
       </div>
 
       <div class="card">
-        <h2>Firmware</h2>
-        <div class="status">
-          <span id="firmwareVersion" style="flex:1">Version: unknown</span>
-          <button type="button" id="checkUpdate">Check for updates now</button>
-        </div>
-        <label class="check"><input type="checkbox" id="autoUpdate"> Install updates automatically, overnight</label>
-        <div class="hint">Updates come from this project's GitHub releases. If new firmware fails, the board goes back to the previous version.</div>
-      </div>
-
-      <div class="card">
         <details>
           <summary>Advanced</summary>
           <label for="temperatureOffsetC">Indoor sensor temperature correction (°C)</label>
@@ -228,12 +237,6 @@
     </div>
   </div>
 
-  <div class="card" style="margin-top:16px">
-    <details>
-      <summary>Device log</summary>
-      <div id="log"></div>
-    </details>
-  </div>
 </main>
 
 <script>
@@ -265,6 +268,13 @@ for (let h = 0; h < 24; h++) {
 if (!("serial" in navigator) || !window.isSecureContext) {
   $("unsupported").style.display = "block";
   $("connect").disabled = true;
+}
+
+// The settings form and the firmware card are enabled together once the
+// board answers.
+function setFormDisabled(disabled) {
+  $("fields").disabled = disabled;
+  $("firmwareFields").disabled = disabled;
 }
 
 function setStatus(text, connected) {
@@ -373,7 +383,7 @@ async function onPortClosed(p) {
   try { await p.close(); } catch {}
   port = null;
   writer = null;
-  $("fields").disabled = true;
+  setFormDisabled(true);
   $("refreshStats").disabled = true;
   setStatus(wantConnection ? "Reconnecting..." : "Disconnected.", false);
 }
@@ -394,7 +404,7 @@ async function loadSettings() {
   $("passwordHint").textContent = s.wifiPasswordSet
     ? "A password is saved. Leave blank to keep it."
     : "No password saved. Leave blank for an open network.";
-  $("fields").disabled = false;
+  setFormDisabled(false);
   setStatus("Connected to the bin tracker.", true);
   await loadStats();
 }
@@ -518,7 +528,7 @@ $("connect").addEventListener("click", async () => {
     port = null;
     try { await p.close(); } catch {}
     setStatus("Disconnected.", false);
-    $("fields").disabled = true;
+    setFormDisabled(true);
     return;
   }
   try {
@@ -547,7 +557,7 @@ $("form").addEventListener("submit", async (e) => {
   if (!reply) return showMessage("No answer from the bin tracker. Check it's still connected.", "error");
   if (!reply.ok) return showMessage(reply.error, "error");
   showMessage("Saved. The bin tracker is restarting to apply the new settings.", "ok");
-  $("fields").disabled = true;
+  setFormDisabled(true);
   await request({ cmd: "restart" }, 2000);
 });
 
@@ -565,7 +575,7 @@ $("reset").addEventListener("click", async () => {
   const reply = await request({ cmd: "reset" });
   if (!reply || !reply.ok) return showMessage((reply && reply.error) || "No answer from the bin tracker.", "error");
   showMessage("Settings reset to the firmware defaults. Restarting.", "ok");
-  $("fields").disabled = true;
+  setFormDisabled(true);
   await request({ cmd: "restart" }, 2000);
 });
 

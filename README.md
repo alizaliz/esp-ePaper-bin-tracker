@@ -175,7 +175,7 @@ Once a night, after fetching the schedule, the board checks this project's [late
 ### Battery life
 The board keeps a daily log of its battery level and activity for the last 60 days: battery voltage and percentage, number of wakes, time awake, and time spent connecting to Wi-Fi. The **Battery log** on the settings page shows it, estimates days remaining once there are three or more days of falling readings, and can download it as CSV. Time spent staying awake for a computer isn't counted.
 
-A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync under 0.1 s, weather about 1.3 s, schedule about 1.3 s and the screen about 1.4 s (each refresh logs this as `Timing (ms): ...`). The current drawn while asleep depends on the board's own components and hasn't been measured; a week on battery, read from the log, gives the real figure.
+A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync under 0.1 s, weather about 1.3 s, schedule about 1.3 s and the screen about 1.4 s (each refresh logs this as `Timing (ms): ...`). **Measured with a USB power meter** (5V side, so it includes the board's charger and regulator): a refresh draws about 0.3W on average, peaking around 0.4W, which is roughly 0.14mAh from the battery. With one or two refreshes a day, that's about 0.15–0.3mAh a day. The current while asleep was below the meter's resolution, so battery life depends almost entirely on that unmeasured figure: about 50µA would give over a year on a 1000mAh battery, 1mA about six weeks. A week on battery, read from the log, or a meter in series with the battery gives the real figure.
 
 <details>
 <summary>Battery and power</summary>
