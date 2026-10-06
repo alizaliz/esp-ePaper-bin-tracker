@@ -168,6 +168,7 @@ Once a night, after fetching the schedule, the board checks this project's [late
 - **Collection days:** the Council's collection day page for your address, `.../rubbish-recycling-collection-days/<assessment number>.html`. The page is about 2.7MB, but the household collection dates are in the first ~16KB, so the board stops reading once it has them. Dates come without a year, such as `Thursday, 8 October`, so the year is taken as the one in which that date falls on that weekday. This relies on the page's HTML rather than a published API, so a site redesign can break it.
 - **Weather:** [Open-Meteo](https://open-meteo.com) daily mean temperature and humidity for your location, in Auckland time. It's free and needs no API key.
 - **Time:** NTP from `nz.pool.ntp.org`, on every wake that gets online. The clock keeps running through deep sleep.
+- **Firmware updates:** the board follows `github.com/<repo>/releases/latest` to find the newest release's tag, then downloads `bin-tracker-<tag>-app.bin` from it. It doesn't use GitHub's API, which only allows 60 requests an hour per network without a login.
 
 </details>
 

@@ -40,7 +40,9 @@ jobs:
         run: |
           B=.pio/build/esp32-c6-devkitc-1
           mkdir dist
-          # App image only: what an over-the-air update downloads.
+          # App image only: what an over-the-air update downloads. Boards
+          # build this file name from the tag (src/ota_updater.cpp), so keep
+          # them in step.
           cp $B/firmware.bin "dist/bin-tracker-$GITHUB_REF_NAME-app.bin"
           # Full image for flashing a board from scratch at address 0x0:
           # bootloader, partition table, app in the first slot, and a blank

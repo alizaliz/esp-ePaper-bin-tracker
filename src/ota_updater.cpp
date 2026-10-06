@@ -4,7 +4,8 @@
 #include <cstring>
 #include <string>
 
-#include "cJSON.h"
+#include <strings.h>
+
 #include "esp_app_desc.h"
 #include "esp_check.h"
 #include "esp_crt_bundle.h"
@@ -12,7 +13,6 @@
 #include "esp_https_ota.h"
 #include "esp_ota_ops.h"
 
-#include "https_client.h"
 #include "settings.h"
 
 // UPDATE_REPOSITORY comes from config.h, or the example's default without it.
@@ -26,7 +26,6 @@ namespace ota {
 namespace {
 
 constexpr const char* TAG = "ota";
-constexpr size_t MAX_RELEASE_JSON = 64 * 1024;  // the latest release is about 8KB
 
 struct Version {
   int major = -1;
@@ -60,35 +59,47 @@ struct Release {
   std::string appUrl;
 };
 
-esp_err_t fetchLatestRelease(Release& release) {
-  const std::string url =
-      std::string("https://api.github.com/repos/") + UPDATE_REPOSITORY + "/releases/latest";
-  std::string body;
-  ESP_RETURN_ON_ERROR(https::get(url.c_str(), MAX_RELEASE_JSON,
-                                 [&](const char* data, size_t len) {
-                                   body.append(data, len);
-                                   return true;
-                                 }),
-                      TAG, "release check failed");
-
-  cJSON* root = cJSON_Parse(body.c_str());
-  ESP_RETURN_ON_FALSE(root != nullptr, ESP_ERR_INVALID_RESPONSE, TAG, "invalid release JSON");
-  const cJSON* tag = cJSON_GetObjectItem(root, "tag_name");
-  if (cJSON_IsString(tag)) release.tag = tag->valuestring;
-  const cJSON* asset;
-  cJSON_ArrayForEach(asset, cJSON_GetObjectItem(root, "assets")) {
-    const cJSON* name = cJSON_GetObjectItem(asset, "name");
-    const cJSON* link = cJSON_GetObjectItem(asset, "browser_download_url");
-    if (cJSON_IsString(name) && cJSON_IsString(link)) {
-      const std::string n = name->valuestring;
-      if (n.size() > 8 && n.compare(n.size() - 8, 8, "-app.bin") == 0) {
-        release.appUrl = link->valuestring;
-      }
-    }
+esp_err_t onHttpEvent(esp_http_client_event_t* event) {
+  if (event->event_id == HTTP_EVENT_ON_HEADER && strcasecmp(event->header_key, "Location") == 0) {
+    *static_cast<std::string*>(event->user_data) = event->header_value;
   }
-  cJSON_Delete(root);
-  ESP_RETURN_ON_FALSE(!release.tag.empty() && !release.appUrl.empty(), ESP_ERR_INVALID_RESPONSE,
-                      TAG, "latest release has no app image");
+  return ESP_OK;
+}
+
+// Finds the latest release from where github.com/<repo>/releases/latest
+// redirects to (.../releases/tag/<tag>). This avoids GitHub's API, which
+// allows only 60 requests an hour per network without a login.
+esp_err_t fetchLatestRelease(Release& release) {
+  const std::string base = std::string("https://github.com/") + UPDATE_REPOSITORY + "/releases";
+  const std::string url = base + "/latest";
+  std::string location;
+
+  esp_http_client_config_t config = {};
+  config.url = url.c_str();
+  config.method = HTTP_METHOD_HEAD;
+  config.disable_auto_redirect = true;
+  config.crt_bundle_attach = esp_crt_bundle_attach;
+  config.timeout_ms = 10000;
+  config.buffer_size = 8192;  // github.com sends about 5KB of headers
+  config.user_agent = "esp-ePaper-bin-tracker";
+  config.event_handler = onHttpEvent;
+  config.user_data = &location;
+
+  esp_http_client_handle_t client = esp_http_client_init(&config);
+  ESP_RETURN_ON_FALSE(client != nullptr, ESP_FAIL, TAG, "client init failed");
+  const esp_err_t err = esp_http_client_perform(client);
+  const int status = esp_http_client_get_status_code(client);
+  esp_http_client_cleanup(client);
+  ESP_RETURN_ON_ERROR(err, TAG, "release check failed");
+  ESP_RETURN_ON_FALSE(status == 302, ESP_ERR_INVALID_RESPONSE, TAG, "release check: HTTP %d",
+                      status);
+
+  const std::string marker = "/releases/tag/";
+  const size_t at = location.find(marker);
+  ESP_RETURN_ON_FALSE(at != std::string::npos, ESP_ERR_NOT_FOUND, TAG, "no releases yet");
+  release.tag = location.substr(at + marker.size());
+  // Asset name set by .github/workflows/release.yml.
+  release.appUrl = base + "/download/" + release.tag + "/bin-tracker-" + release.tag + "-app.bin";
   return ESP_OK;
 }
 
