@@ -129,7 +129,7 @@ The board spends almost all its time in deep sleep. The e-paper screen keeps its
 
 | When | What happens |
 | --- | --- |
-| **00:05** every night | Full refresh: connect to Wi-Fi, set the clock, fetch the schedule and weather, check for a firmware update, redraw the screen, then sleep. Takes a few seconds; Wi-Fi itself usually connects in under a second. |
+| **00:05** every night | Full refresh: connect to Wi-Fi, set the clock, fetch the schedule and weather, check for a firmware update, redraw the screen, then sleep. Takes about 5 seconds. |
 | **18:00** the evening before a pickup | Full refresh showing `TONIGHT`, and a slow blink of the LED for 10 seconds |
 | After a failed refresh | Retry in an hour, up to three times, then return to the normal schedule |
 | Every 10 minutes, while the battery is low | Double-blink the LED for 10 seconds, then sleep again. No Wi-Fi or redraw. |
@@ -166,11 +166,16 @@ Once a night, after fetching the schedule, the board checks this project's [late
 <summary>Data sources</summary>
 
 - **Collection days:** the Council's collection day page for your address, `.../rubbish-recycling-collection-days/<assessment number>.html`. The page is about 2.7MB, but the household collection dates are in the first ~16KB, so the board stops reading once it has them. Dates come without a year, such as `Thursday, 8 October`, so the year is taken as the one in which that date falls on that weekday. This relies on the page's HTML rather than a published API, so a site redesign can break it.
-- **Weather:** [Open-Meteo](https://open-meteo.com) daily mean temperature and humidity for your location, in Auckland time. It's free and needs no API key.
+- **Weather:** [Open-Meteo](https://open-meteo.com) daily mean temperature and humidity for your location, in Auckland time. It's free and needs no API key. It's fetched once a day and reused by later wakes. The request uses plain HTTP: Open-Meteo's servers are in Germany, and setting up an encrypted connection that far takes the board 3–10 seconds instead of about 1. The weather data isn't sensitive; everything else uses HTTPS.
 - **Time:** NTP from `nz.pool.ntp.org`, on every wake that gets online. The clock keeps running through deep sleep.
 - **Firmware updates:** the board follows `github.com/<repo>/releases/latest` to find the newest release's tag, then downloads `bin-tracker-<tag>-app.bin` from it. It doesn't use GitHub's API, which only allows 60 requests an hour per network without a login.
 
 </details>
+
+### Battery life
+The board keeps a daily log of its battery level and activity for the last 60 days: battery voltage and percentage, number of wakes, time awake, and time spent connecting to Wi-Fi. The **Battery log** on the settings page shows it, estimates days remaining once there are three or more days of falling readings, and can download it as CSV. Time spent staying awake for a computer isn't counted.
+
+A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync under 0.1 s, weather about 1.3 s, schedule about 1.3 s and the screen about 1.4 s (each refresh logs this as `Timing (ms): ...`). The current drawn while asleep depends on the board's own components and hasn't been measured; a week on battery, read from the log, gives the real figure.
 
 <details>
 <summary>Battery and power</summary>
@@ -179,6 +184,7 @@ Once a night, after fetching the schedule, the board checks this project's [late
 - Wi-Fi reconnects quickly: the board remembers the router it last used (saved in flash) and connects straight to it without scanning, asks for its previous IP address, and skips the address conflict check. It usually connects in about 0.7 seconds. If the remembered router doesn't answer within 6 seconds, for example after a router change, it forgets it and scans as normal.
 - Every wake keeps the board's battery power hold switched on. The panel is powered only while it's being redrawn.
 - The low battery LED uses light sleep between blinks, so the 10-minute reminder wakes cost little.
+- The board doesn't wait the random 0–5 seconds ESP-IDF normally adds before the first time request (meant to spread out many devices starting at once). Each sync logs how far the clock had drifted (`Clock corrected by ...`).
 - Deep sleep turns off USB, so a sleeping board can't be flashed or configured. It stays awake while a computer is connected; turn off **Stay awake on USB** to test real sleep while plugged in. Chargers and power banks don't count as a computer.
 
 </details>
@@ -205,6 +211,7 @@ Once a night, after fetching the schedule, the board checks this project's [late
 | `src/ui/bin_screen.*` | Screen layout: plain LVGL, previewable on a computer |
 | `src/ui/mono_convert.*` | Greyscale to black and white, and the 180° flip |
 | `src/shtc3.*`, `src/battery.*` | Onboard sensor and battery reading |
+| `src/stats.*` | Daily battery and activity log |
 | `src/board_power.*`, `src/board_pins.h` | I2C, the I/O expander (panel power, battery hold, LED) and pins |
 | `components/fonts/` | Generated LVGL fonts: Montserrat Bold and Font Awesome icons |
 | `tools/preview/` | Renders the screen to PNGs on a computer |

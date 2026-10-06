@@ -8,14 +8,13 @@ namespace https {
 namespace {
 
 constexpr const char* TAG = "https";
-constexpr int TIMEOUT_MS = 10000;
 
 }  // namespace
 
-esp_err_t get(const char* url, size_t max_bytes, const ChunkHandler& on_chunk) {
+esp_err_t get(const char* url, size_t max_bytes, const ChunkHandler& on_chunk, int timeout_ms) {
   esp_http_client_config_t config = {};
   config.url = url;
-  config.timeout_ms = TIMEOUT_MS;
+  config.timeout_ms = timeout_ms;
   config.crt_bundle_attach = esp_crt_bundle_attach;
   config.buffer_size = 4096;  // response headers must fit (GitHub's API sends ~2KB)
   config.user_agent = "esp-ePaper-bin-tracker";

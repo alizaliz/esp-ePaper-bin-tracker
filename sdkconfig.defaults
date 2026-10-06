@@ -25,3 +25,8 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 # negotiating a new one, and don't wait to check the address is unused.
 CONFIG_LWIP_DHCP_RESTORE_LAST_IP=y
 CONFIG_LWIP_DHCP_DOES_NOT_CHECK_OFFERED_IP=y
+
+# Don't wait a random 0-5 seconds before the first NTP request. The delay
+# spreads out requests from many devices starting at once; a single board
+# doesn't need it, and it's time spent awake.
+# CONFIG_LWIP_SNTP_STARTUP_DELAY is not set

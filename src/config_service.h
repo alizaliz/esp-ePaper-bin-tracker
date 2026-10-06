@@ -11,6 +11,7 @@
 //   set + settings   -> validates and saves; {"ok":true} or {"ok":false,"error":"..."}
 //   reset            -> forgets saved settings, back to the config.h defaults
 //   restart          -> replies, then restarts so new settings take effect
+//   stats            -> {"ok":true,"days":[...]}, the daily battery log (see stats.h)
 //   update           -> replies, then the main task checks for and installs a
 //                       firmware update (see takeUpdateRequest)
 namespace config_service {

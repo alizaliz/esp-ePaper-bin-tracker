@@ -28,6 +28,7 @@
 #include "network.h"
 #include "ota_updater.h"
 #include "shtc3.h"
+#include "stats.h"
 #include "storage.h"
 #include "weather_client.h"
 
@@ -98,6 +99,14 @@ struct Climate {
   float temperatureC;
   float humidityPct;
 };
+
+// Today's weather is a daily average, so it's fetched once a day and reused
+// by later wakes (bin night, retries, PWR presses).
+struct DailyWeather {
+  Date date;
+  Climate climate;
+};
+RTC_DATA_ATTR static DailyWeather cached_weather = {};
 
 static void log_wakeup_cause(void) {
   const uint32_t causes = esp_sleep_get_wakeup_causes();
@@ -336,6 +345,7 @@ static int check_battery(void) {
     battery_low = false;
   }
   printf("Battery: %.2f V, %d %%%s\n", volts, percent, battery_low ? " (low)" : "");
+  if (clock_is_set()) stats::recordBattery(local_today(), (int)lroundf(volts * 1000), percent);
   return percent;
 }
 
@@ -389,12 +399,16 @@ static Climate read_sensor(void) {
 }
 
 static Climate fetch_weather(void) {
+  if (clock_is_set() && cached_weather.climate.valid && cached_weather.date == local_today()) {
+    return cached_weather.climate;
+  }
   Climate climate = {};
   if (weather::fetchDailyMean(settings::get().latitude, settings::get().longitude, climate.temperatureC,
                               climate.humidityPct) == ESP_OK) {
     climate.valid = true;
     printf("Weather (today's mean): %.1f C, %.1f %%\n", climate.temperatureC,
            climate.humidityPct);
+    if (clock_is_set()) cached_weather = {local_today(), climate};
   } else {
     printf("Failed to fetch the weather\n");
   }
@@ -501,25 +515,56 @@ static void maybe_update_firmware(int battery_pct) {
 // Reads the sensor, goes online for the clock, weather and schedule, and
 // redraws the screen. Returns true if it shows the bin night reminder.
 static bool full_refresh(int battery_pct) {
+  // Time each phase for the log, to see where a wake's time (and battery)
+  // goes.
+  int64_t mark = esp_timer_get_time();
+  auto lap = [&mark]() {
+    const int64_t now = esp_timer_get_time();
+    const int ms = (int)((now - mark) / 1000);
+    mark = now;
+    return ms;
+  };
+  int wifi_ms = 0, clock_ms = 0, weather_ms = 0, schedule_ms = 0, update_ms = 0;
+
   const Climate sensor = read_sensor();
   Climate weather = {};
 
   // Wi-Fi is only on for as long as the fetches take.
+  lap();
   const bool online = network::connect(WIFI_TIMEOUT_MS) == ESP_OK;
+  wifi_ms = lap();
   bool fetched = false;
   if (online) {
+    if (clock_is_set()) stats::recordWifi(local_today(), network::lastConnectMs());
+    // Log how far the clock drifted since the last sync, to judge whether
+    // syncing on every wake is needed.
+    const bool had_clock = clock_is_set();
+    struct timeval before;
+    gettimeofday(&before, nullptr);
+    const int64_t before_us = esp_timer_get_time();
     if (network::syncTime(NTP_TIMEOUT_MS) != ESP_OK) {
       printf("Failed to sync the clock\n");
+    } else if (had_clock) {
+      struct timeval after;
+      gettimeofday(&after, nullptr);
+      const int64_t expected_us = (int64_t)before.tv_sec * 1000000 + before.tv_usec +
+                                  (esp_timer_get_time() - before_us);
+      const int64_t actual_us = (int64_t)after.tv_sec * 1000000 + after.tv_usec;
+      printf("Clock corrected by %+.2f s\n", (actual_us - expected_us) / 1e6);
     }
+    clock_ms = lap();
     if (settings::get().useOnlineWeather) {
       weather = fetch_weather();
     }
+    weather_ms = lap();
     Schedule schedule;
     fetched = fetch_schedule(schedule);
+    schedule_ms = lap();
     if (fetched) {
       // New firmware has proven it can get online and fetch the schedule.
       ota::markHealthy();
       maybe_update_firmware(battery_pct);
+      update_ms = lap();
       schedule.fetchedAt = time(nullptr);
       last_schedule = schedule;
       fetched_since_power_on = true;
@@ -539,7 +584,11 @@ static bool full_refresh(int battery_pct) {
     printf("Today is %04d-%02d-%02d\n", today.year, today.month, today.day);
   }
 
+  lap();
   const bool tonight = refresh_display(online, weather.valid ? weather : sensor, battery_pct);
+  const int display_ms = lap();
+  printf("Timing (ms): Wi-Fi %d, clock %d, weather %d, schedule %d, update check %d, display %d\n",
+         wifi_ms, clock_ms, weather_ms, schedule_ms, update_ms, display_ms);
 
   if (!fetched && ota::isPendingVerify()) {
     printf("New firmware %s couldn't fetch the schedule; the previous version will be "
@@ -597,8 +646,10 @@ extern "C" void app_main(void) {
   // Any other wake (PWR button, power on, reset, flashing) always refreshes.
   const bool timer_wake = esp_sleep_get_wakeup_causes() & BIT(ESP_SLEEP_WAKEUP_TIMER);
   bool tonight = false;
+  bool refreshed = false;
   if (!timer_wake || time(nullptr) >= next_refresh) {
     tonight = full_refresh(battery_pct);
+    refreshed = true;
   }
 
   if (battery_low) {
@@ -607,6 +658,11 @@ extern "C" void app_main(void) {
     blink_led("Bin night", BIN_NIGHT_BLINK);
   }
 
+  // Log this wake's working time, before any time spent staying awake for a
+  // computer.
+  if (clock_is_set()) {
+    stats::endWake(local_today(), (uint32_t)(esp_timer_get_time() / 1000), refreshed);
+  }
   stay_awake_while_usb_connected();
   enter_deep_sleep();
 }

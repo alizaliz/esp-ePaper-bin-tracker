@@ -28,6 +28,7 @@ bool started = false;
 // and when it got an IP address.
 int64_t start_us = 0;
 int64_t associated_us = 0;
+int last_connect_ms = 0;
 
 // The access point last connected to. Connecting straight to it skips the
 // scan across all channels. Saved in flash, so it survives restarts too.
@@ -146,12 +147,15 @@ esp_err_t connect(int timeout_ms) {
     return ESP_ERR_TIMEOUT;
   }
   const int64_t now_us = esp_timer_get_time();
+  last_connect_ms = static_cast<int>((now_us - start_us) / 1000);
   ESP_LOGI(TAG, "connected to \"%s\"%s: joined after %lld ms, IP address after %lld ms",
            settings::get().wifiSsid, remembered ? " (remembered access point)" : "",
            (associated_us - start_us) / 1000, (now_us - start_us) / 1000);
   rememberAp();
   return ESP_OK;
 }
+
+int lastConnectMs() { return last_connect_ms; }
 
 esp_err_t syncTime(int timeout_ms) {
   esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG(NTP_SERVER);

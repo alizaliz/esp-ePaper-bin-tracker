@@ -66,6 +66,8 @@
     white-space: pre-wrap; word-break: break-all;
   }
   #unsupported { display: none; }
+  #statsTable th, #statsTable td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: right; }
+  #statsTable td:first-child, #statsTable th:first-child { text-align: left; }
 
   /* Low battery slider: the track is coloured like a battery's charge, from
      red (empty) through amber to green, and dimmed above the chosen level. */
@@ -208,6 +210,23 @@
       </div>
     </fieldset>
   </form>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Battery log</h2>
+    <p class="hint" id="statsSummary" style="margin-top:0">Connect to see the board's daily battery readings.</p>
+    <div style="overflow-x:auto">
+      <table id="statsTable" style="width:100%; border-collapse:collapse; font-size:13px; display:none">
+        <thead><tr>
+          <th style="text-align:left">Day</th><th>Battery</th><th>Wakes</th><th>Awake</th><th>Wi-Fi</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="actions" style="margin-top:12px">
+      <button type="button" id="refreshStats" disabled>Refresh</button>
+      <button type="button" id="downloadStats" disabled>Download CSV</button>
+    </div>
+  </div>
 
   <div class="card" style="margin-top:16px">
     <details>
@@ -355,6 +374,7 @@ async function onPortClosed(p) {
   port = null;
   writer = null;
   $("fields").disabled = true;
+  $("refreshStats").disabled = true;
   setStatus(wantConnection ? "Reconnecting..." : "Disconnected.", false);
 }
 
@@ -376,7 +396,86 @@ async function loadSettings() {
     : "No password saved. Leave blank for an open network.";
   $("fields").disabled = false;
   setStatus("Connected to the bin tracker.", true);
+  await loadStats();
 }
+
+// Battery log -------------------------------------------------------------
+
+let statsDays = [];
+
+const seconds = (ms) => (ms / 1000).toFixed(1) + " s";
+
+// Days from the first to the last of a list of "YYYY-MM-DD" dates.
+function daySpan(a, b) {
+  return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+}
+
+function summariseStats(days) {
+  if (!days.length) return "No readings yet. The board logs one entry per day, starting from its next wake.";
+  const withBattery = days.filter((d) => d.mv > 0);
+  const recent = withBattery.slice(-14);
+  const parts = [];
+  const awake = days.filter((d) => d.wakes > 0);
+  if (awake.length) {
+    const avg = awake.reduce((t, d) => t + d.awakeMs, 0) / awake.length;
+    parts.push(`On average the board is awake for ${seconds(avg)} a day.`);
+  }
+  if (recent.length && recent.slice(-3).every((d) => d.mv >= 4150)) {
+    parts.push("The voltage is staying around 4.2V, which usually means no battery is connected "
+      + "(the reading is the charger's output) or the battery is charging.");
+  } else if (recent.length >= 2) {
+    const first = recent[0], last = recent[recent.length - 1];
+    const span = daySpan(first.date, last.date);
+    const drop = first.pct - last.pct;
+    if (span >= 3 && drop > 0) {
+      const perDay = drop / span;
+      const empty = Math.round(last.pct / perDay);
+      const reminder = Math.max(0, Math.round((last.pct - 10) / perDay));
+      parts.push(`The battery is dropping about ${perDay.toFixed(1)}% a day: roughly ${empty} days `
+        + `until empty, and ${reminder} until the 10% charging reminder.`);
+    } else {
+      parts.push("A battery life estimate needs at least three days of falling battery readings.");
+    }
+  }
+  return parts.join(" ");
+}
+
+async function loadStats() {
+  const reply = await request({ cmd: "stats" });
+  if (!reply || !reply.ok) {
+    $("statsSummary").textContent = "This firmware doesn't keep a battery log. Update it to see one.";
+    return;
+  }
+  statsDays = reply.days || [];
+  const body = $("statsTable").querySelector("tbody");
+  body.textContent = "";
+  for (const d of statsDays.slice().reverse()) {
+    const row = document.createElement("tr");
+    const battery = d.mv ? `${(d.mv / 1000).toFixed(2)} V (${d.pct}%)` : "–";
+    for (const text of [d.date, battery, d.wakes, seconds(d.awakeMs), seconds(d.wifiMs)]) {
+      const cell = document.createElement("td");
+      cell.textContent = text;
+      row.append(cell);
+    }
+    body.append(row);
+  }
+  $("statsTable").style.display = statsDays.length ? "table" : "none";
+  $("statsSummary").textContent = summariseStats(statsDays);
+  $("refreshStats").disabled = false;
+  $("downloadStats").disabled = !statsDays.length;
+}
+
+$("refreshStats").addEventListener("click", loadStats);
+
+$("downloadStats").addEventListener("click", () => {
+  const lines = ["date,battery_mv,battery_percent,wakes,awake_ms,wifi_ms"];
+  for (const d of statsDays) lines.push([d.date, d.mv, d.pct, d.wakes, d.awakeMs, d.wifiMs].join(","));
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "text/csv" }));
+  link.download = "bin-tracker-battery-log.csv";
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
 
 // Colour for a charge level, matching the slider's track.
 function levelColour(percent) {

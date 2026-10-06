@@ -13,6 +13,7 @@
 
 #include "ota_updater.h"
 #include "settings.h"
+#include "stats.h"
 
 namespace config_service {
 namespace {
@@ -85,6 +86,10 @@ void handle(const std::string& line) {
     replyOk();
     vTaskDelay(pdMS_TO_TICKS(200));  // let the reply go out
     esp_restart();
+  } else if (command == "stats") {
+    cJSON* json = cJSON_CreateObject();
+    cJSON_AddItemToObject(json, "days", stats::toJson());
+    replyOk(json);
   } else if (command == "update") {
     update_requested = true;
     replyOk();

@@ -15,6 +15,10 @@ esp_err_t connect(int timeout_ms);
 // The clock then keeps running through deep sleep.
 esp_err_t syncTime(int timeout_ms);
 
+// How long the last successful connect() took, from radio start to IP
+// address, in milliseconds.
+int lastConnectMs();
+
 // Disconnects and powers the radio down.
 void disconnect();
 
