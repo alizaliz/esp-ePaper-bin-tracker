@@ -1,0 +1,62 @@
+# Builds the firmware, runs the tests and renders the screen previews on every
+# push and pull request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            managed_components
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'dependencies.lock', 'sdkconfig.defaults') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      # There's no src/config.h in the repo, so this builds the firmware that
+      # gets published: defaults from config.example.h, nothing personal.
+      - name: Build firmware
+        # The first build after a clean can fail once while PlatformIO sets up
+        # the ESP-IDF component manager; a second run succeeds.
+        run: pio run || pio run
+
+      - name: Council parser tests
+        run: tests/run.sh
+
+      - name: Render screen previews
+        run: |
+          sudo apt-get install -y -qq zlib1g-dev
+          tools/preview/run.sh | tee preview.log
+          if grep -q WARNING preview.log; then
+            echo "::error::Something is drawn off screen"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            .pio/build/esp32-c6-devkitc-1/firmware.bin
+            .pio/build/esp32-c6-devkitc-1/bootloader.bin
+            .pio/build/esp32-c6-devkitc-1/partitions.bin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screen-previews
+          path: tools/preview/out/*.png

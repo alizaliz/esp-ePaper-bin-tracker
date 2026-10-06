@@ -1,0 +1,55 @@
+# Pushing a version tag (e.g. v1.0.0) builds the firmware and publishes it as
+# a GitHub Release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history and tags, so the firmware's version (from
+          # `git describe`) is the tag.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PlatformIO and esptool
+        run: pip install platformio "esptool>=4.7,<5"
+
+      - name: Build firmware
+        run: pio run || pio run
+
+      - name: Check the firmware version matches the tag
+        run: |
+          if ! grep -qaF "$GITHUB_REF_NAME" .pio/build/esp32-c6-devkitc-1/firmware.bin; then
+            echo "::error::Firmware version doesn't match $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+      - name: Package
+        run: |
+          B=.pio/build/esp32-c6-devkitc-1
+          mkdir dist
+          # App image only: what an over-the-air update downloads.
+          cp $B/firmware.bin "dist/bin-tracker-$GITHUB_REF_NAME-app.bin"
+          # Full image (bootloader, partition table and app) for flashing a
+          # board from scratch at address 0x0.
+          python -m esptool --chip esp32c6 merge_bin -o "dist/bin-tracker-$GITHUB_REF_NAME-full.bin" \
+            --flash_mode dio --flash_freq 80m --flash_size 16MB \
+            0x0 $B/bootloader.bin 0x8000 $B/partitions.bin 0x10000 $B/firmware.bin
+          (cd dist && sha256sum *.bin > SHA256SUMS)
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes

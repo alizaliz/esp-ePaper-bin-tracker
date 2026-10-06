@@ -1,0 +1,33 @@
+# Weekly check that the Auckland Council collection day page still parses, so
+# a website redesign is noticed before it leaves boards showing stale dates.
+#
+# Needs a repository secret COUNCIL_CHECK_ASSESSMENT_NUMBER with any valid
+# Auckland assessment number. It's a secret so the address isn't published.
+name: Council page check
+
+on:
+  schedule:
+    - cron: "17 20 * * 0"  # Mondays 08:17/09:17 NZ time
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the collection day page
+        env:
+          ASSESSMENT_NUMBER: ${{ secrets.COUNCIL_CHECK_ASSESSMENT_NUMBER }}
+        run: |
+          if [ -z "$ASSESSMENT_NUMBER" ]; then
+            echo "::error::Set the COUNCIL_CHECK_ASSESSMENT_NUMBER repository secret"
+            exit 1
+          fi
+          curl -sSf --max-time 30 -A "esp-ePaper-bin-tracker" -o page.html \
+            "https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days/${ASSESSMENT_NUMBER}.html"
+
+      - name: Check it parses
+        env:
+          TZ: Pacific/Auckland
+        run: tests/run.sh --live page.html

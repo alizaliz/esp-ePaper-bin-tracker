@@ -9,6 +9,7 @@
 
 #include "driver/gpio.h"
 #include "driver/usb_serial_jtag.h"
+#include "esp_app_desc.h"
 #include "esp_attr.h"
 #include "esp_sleep.h"
 #include "esp_system.h"
@@ -470,7 +471,9 @@ static bool full_refresh(int battery_pct) {
 }
 
 extern "C" void app_main(void) {
-  printf("ESP32-C6 ePaper tracker booting...\n");
+  // The version comes from `git describe` at build time: the release tag
+  // (e.g. v1.0.0) for release builds, otherwise a commit hash.
+  printf("ESP32-C6 ePaper tracker %s booting...\n", esp_app_get_description()->version);
   log_wakeup_cause();
   start_awake_cap();
 

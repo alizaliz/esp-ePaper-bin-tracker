@@ -1,5 +1,7 @@
 # esp-ePaper-bin-tracker
 
+[![CI](https://github.com/alizaliz/esp-ePaper-bin-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/alizaliz/esp-ePaper-bin-tracker/actions/workflows/ci.yml)
+
 A battery-powered e-paper display that shows your next Auckland Council rubbish, recycling and food scraps collection. It runs on the [Waveshare ESP32-C6 1.54" e-Paper board](https://www.waveshare.com/esp32-c6-epaper-1.54.htm), wakes once a day to fetch the schedule, and sleeps the rest of the time.
 
 ![Labelled diagram of the screen and the board's controls](docs/images/diagram.svg)
@@ -16,6 +18,13 @@ A battery-powered e-paper display that shows your next Auckland Council rubbish,
 - The Waveshare ESP32-C6 1.54" e-Paper board, and a USB-C data cable
 - Optional: a 3.7V lithium battery with an MX1.25 plug (it charges over USB-C)
 - A computer with Python 3.10 or later, and Chrome, Edge or Firefox
+
+<details>
+<summary>No build tools? Flash a release instead</summary>
+
+Each [release](https://github.com/alizaliz/esp-ePaper-bin-tracker/releases) includes `bin-tracker-<version>-full.bin`, a complete image to flash at address `0x0`. In Chrome or Edge, open [Espressif's web flasher](https://espressif.github.io/esptool-js/), connect to the board, add the file at address `0x0` and click **Program**. Then skip to step 3.
+
+</details>
 
 ### 1. Install the tools
 ```sh
@@ -35,11 +44,12 @@ The first build downloads the ESP-IDF toolchain and LVGL, which takes a few minu
 ### 3. Configure it from the settings page
 Settings are made in a web page that talks to the board over USB, and are saved on the board.
 
-1. Start the page: `python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/config`
-2. Open **http://localhost:8765** in a recent desktop Chrome, Edge or Firefox.
-3. Click **Connect** and choose the bin tracker. Close `pio device monitor` first, as only one program can use the port.
-4. Fill in your **Wi-Fi network**, your **Assessment number**, and your **location** for the weather. To find the Assessment number, search for your address on the [Council's collection day page](https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html); it's also the number at the end of the results page's address.
-5. Click **Save and restart**.
+1. Open the settings page, **[alizaliz.github.io/esp-ePaper-bin-tracker/config/](https://alizaliz.github.io/esp-ePaper-bin-tracker/config/)**, in a recent desktop Chrome, Edge or Firefox.
+2. Click **Connect** and choose the bin tracker. Close `pio device monitor` first, as only one program can use the port.
+3. Fill in your **Wi-Fi network**, your **Assessment number**, and your **location** for the weather. To find the Assessment number, search for your address on the [Council's collection day page](https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html); it's also the number at the end of the results page's address.
+4. Click **Save and restart**.
+
+To use the page offline, serve it locally with `python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/config` and open http://localhost:8765.
 
 The page also sets the reminder time, the low battery level, the screen orientation and more. Come back to it any time to change them. The Wi-Fi password is never shown, and stays as it is unless you type a new one.
 
@@ -173,7 +183,9 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 | `src/storage.*` | Values saved in flash (NVS): the last schedule and the settings |
 | `src/settings.*` | Settings: `config.h` defaults overridden by values saved from the page |
 | `src/config_service.*` | Answers the settings page over USB serial |
-| `docs/config/index.html` | The settings page (Web Serial) |
+| `docs/config/index.html` | The settings page (Web Serial), published with GitHub Pages |
+| `tests/` | Council parser tests and fixture |
+| `.github/workflows/` | CI, releases and the weekly Council page check |
 | `src/display_manager.*`, `src/epd_ssd1681.*` | LVGL setup and the e-paper panel driver |
 | `src/ui/bin_screen.*` | Screen layout: plain LVGL, previewable on a computer |
 | `src/ui/mono_convert.*` | Greyscale to black and white, and the 180° flip |
@@ -184,6 +196,17 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 | `tools/fonts/generate.sh` | Regenerates the fonts |
 | `tools/docs/make_images.py` | Regenerates the README images in `docs/images/` |
 | `sdkconfig.defaults`, `partitions.csv` | ESP-IDF settings and the flash layout (4MB app partition) |
+
+</details>
+
+<details>
+<summary>Tests, CI and releases</summary>
+
+- `tests/run.sh` runs the Council parser tests on your computer.
+- **CI** (`.github/workflows/ci.yml`) runs on every push: it builds the firmware without `src/config.h`, so it's the same firmware that gets published, with no personal details. It also runs the parser tests and renders the screen previews, failing if anything is off screen. The firmware and previews are attached to each run.
+- **Releases:** push a version tag to publish one, e.g. `git tag v1.0.0 && git push origin v1.0.0`. The release workflow builds the firmware, checks its version matches the tag, and attaches the app image (for over-the-air updates), a full image (for flashing from scratch) and checksums.
+- **Council page check** (`.github/workflows/council-check.yml`) runs weekly and checks the live Council page still parses. It needs a repository secret, `COUNCIL_CHECK_ASSESSMENT_NUMBER`, holding any valid assessment number; it's a secret so the address isn't published.
+- The firmware's version comes from `git describe`: the tag for release builds, otherwise a commit hash. It's logged at boot.
 
 </details>
 

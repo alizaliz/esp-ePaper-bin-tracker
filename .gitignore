@@ -55,3 +55,4 @@ src/config.h
 tools/fonts/.cache/
 tools/preview/build/
 tools/preview/out/
+tests/build/
