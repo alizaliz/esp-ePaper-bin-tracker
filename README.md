@@ -97,7 +97,7 @@ While it's plugged into a computer, the board stays awake. Unplug it, or run it 
 | `Failed to resolve component 'lvgl__lvgl'` | A one-off PlatformIO ordering issue on the first build after a clean. Run the build again. |
 | `no Wi-Fi network set` | Set up Wi-Fi on the settings page. |
 | `no connection to "<SSID>"` | Check the Wi-Fi name and password, and that the network is 2.4GHz. |
-| `collection dates not found` | Check the Assessment number. If it's right, the Council website layout may have changed (see Data sources under [How it works](#how-it-works)). |
+| `collection dates not found` or HTTP 406 | HTTP 406 means the Council website refused the connection: it blocks VPNs, so the board's network must connect directly. Otherwise, check the Assessment number. If it's right, the Council website layout may have changed (see Data sources under [How it works](#how-it-works)). |
 | Screen shows `--` for temperature and humidity | Neither the online weather nor the onboard sensor could be read. |
 
 </details>
@@ -186,8 +186,8 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 | `src/settings.*` | Settings: `config.h` defaults overridden by values saved from the page |
 | `src/config_service.*` | Answers the settings page over USB serial |
 | `docs/config/index.html` | The settings page (Web Serial), published with GitHub Pages |
-| `tests/` | Council parser tests and fixture |
-| `.github/workflows/` | CI, releases and the weekly Council page check |
+| `tests/` | Council parser tests, fixture and the live page check |
+| `.github/workflows/` | CI and releases |
 | `src/display_manager.*`, `src/epd_ssd1681.*` | LVGL setup and the e-paper panel driver |
 | `src/ui/bin_screen.*` | Screen layout: plain LVGL, previewable on a computer |
 | `src/ui/mono_convert.*` | Greyscale to black and white, and the 180° flip |
@@ -204,10 +204,10 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 <details>
 <summary>Tests, CI and releases</summary>
 
-- `tests/run.sh` runs the Council parser tests on your computer.
+- `tests/run.sh` runs the Council parser tests on your computer, against a saved copy of the page's markup.
+- `tests/check_live.sh <assessment number>` checks the live Council page still parses, from your own connection. Run it now and then, or if boards start showing the out of date icon. The Council website refuses requests from VPNs and data centres (HTTP 406), including GitHub's servers, which is why this check isn't automated.
 - **CI** (`.github/workflows/ci.yml`) runs on every push: it builds the firmware without `src/config.h`, so it's the same firmware that gets published, with no personal details. It also runs the parser tests and renders the screen previews, failing if anything is off screen. The firmware and previews are attached to each run.
 - **Releases:** push a version tag to publish one, e.g. `git tag v1.0.0 && git push origin v1.0.0`. The release workflow builds the firmware, checks its version matches the tag, and attaches the app image (for over-the-air updates), a full image (for flashing from scratch) and checksums.
-- **Council page check** (`.github/workflows/council-check.yml`) runs weekly and checks the live Council page still parses. It needs a repository secret, `COUNCIL_CHECK_ASSESSMENT_NUMBER`, holding any valid assessment number; it's a secret so the address isn't published.
 - The firmware's version comes from `git describe`: the tag for release builds, otherwise a commit hash. It's logged at boot.
 
 </details>
