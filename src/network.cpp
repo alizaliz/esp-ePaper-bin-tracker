@@ -10,7 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 
-#include "config.h"
+#include "settings.h"
 
 namespace network {
 namespace {
@@ -37,6 +37,10 @@ void onEvent(void*, esp_event_base_t base, int32_t id, void*) {
 }  // namespace
 
 esp_err_t connect(int timeout_ms) {
+  if (settings::get().wifiSsid[0] == '\0') {
+    ESP_LOGW(TAG, "no Wi-Fi network set; use the config page");
+    return ESP_ERR_INVALID_STATE;
+  }
   if (!started) {
     ESP_RETURN_ON_ERROR(esp_netif_init(), TAG, "netif init failed");
     ESP_RETURN_ON_ERROR(esp_event_loop_create_default(), TAG, "event loop failed");
@@ -51,9 +55,9 @@ esp_err_t connect(int timeout_ms) {
         esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, onEvent, nullptr), TAG, "");
 
     wifi_config_t wifi_config = {};
-    strncpy(reinterpret_cast<char*>(wifi_config.sta.ssid), WIFI_SSID,
+    strncpy(reinterpret_cast<char*>(wifi_config.sta.ssid), settings::get().wifiSsid,
             sizeof(wifi_config.sta.ssid));
-    strncpy(reinterpret_cast<char*>(wifi_config.sta.password), WIFI_PASSWORD,
+    strncpy(reinterpret_cast<char*>(wifi_config.sta.password), settings::get().wifiPassword,
             sizeof(wifi_config.sta.password));
     ESP_RETURN_ON_ERROR(esp_wifi_set_storage(WIFI_STORAGE_RAM), TAG, "");
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "");
@@ -65,11 +69,11 @@ esp_err_t connect(int timeout_ms) {
   const EventBits_t bits =
       xEventGroupWaitBits(events, CONNECTED_BIT, pdFALSE, pdTRUE, pdMS_TO_TICKS(timeout_ms));
   if (!(bits & CONNECTED_BIT)) {
-    ESP_LOGW(TAG, "no connection to \"%s\" within %d ms", WIFI_SSID, timeout_ms);
+    ESP_LOGW(TAG, "no connection to \"%s\" within %d ms", settings::get().wifiSsid, timeout_ms);
     disconnect();
     return ESP_ERR_TIMEOUT;
   }
-  ESP_LOGI(TAG, "connected to \"%s\"", WIFI_SSID);
+  ESP_LOGI(TAG, "connected to \"%s\"", settings::get().wifiSsid);
   return ESP_OK;
 }
 

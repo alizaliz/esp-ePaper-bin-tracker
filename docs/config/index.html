@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bin Tracker Settings</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1f2328; --muted: #59636e;
+    --border: #d1d9e0; --accent: #0969da; --accent-text: #ffffff;
+    --ok: #1a7f37; --error: #cf222e; --input: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #161b22; --text: #e6edf3; --muted: #9198a1;
+      --border: #3d444d; --accent: #4493f8; --accent-text: #0d1117;
+      --ok: #3fb950; --error: #f85149; --input: #0d1117;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+  a { color: var(--accent); }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 12px; }
+  .status { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--ok); }
+  #statusText { flex: 1; min-width: 160px; }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  label:first-of-type { margin-top: 0; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  input[type=text], input[type=password], input[type=number], select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--input); color: var(--text); font: inherit;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .check { display: flex; align-items: center; gap: 8px; font-weight: normal; margin: 10px 0 0; }
+  .check input { width: 16px; height: 16px; margin: 0; }
+  button {
+    font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button.link { border: none; background: none; color: var(--accent); padding: 0; font-weight: normal; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .actions .spacer { flex: 1; }
+  #message { margin: 0 0 16px; padding: 10px 12px; border-radius: 6px; display: none; }
+  #message.ok { display: block; border: 1px solid var(--ok); color: var(--ok); }
+  #message.error { display: block; border: 1px solid var(--error); color: var(--error); }
+  fieldset { border: none; padding: 0; margin: 0; }
+  fieldset:disabled { opacity: 0.55; }
+  details summary { cursor: pointer; font-weight: 600; }
+  #log {
+    margin: 12px 0 0; max-height: 240px; overflow: auto; font: 12px/1.4 ui-monospace, Menlo, monospace;
+    background: var(--input); border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  #unsupported { display: none; }
+
+  /* Low battery slider: the track is coloured like a battery's charge, from
+     red (empty) through amber to green, and dimmed above the chosen level. */
+  .battery { display: flex; align-items: center; gap: 12px; }
+  .battery output {
+    min-width: 3.5em; text-align: center; font-weight: 700; padding: 2px 8px;
+    border-radius: 6px; color: #fff; background: var(--level, #cf222e);
+  }
+  .battery input[type=range] {
+    flex: 1; -webkit-appearance: none; appearance: none; height: 14px; margin: 0;
+    border-radius: 7px; border: 1px solid var(--border); cursor: pointer;
+    background:
+      linear-gradient(to right, transparent var(--pct, 20%), color-mix(in srgb, var(--card) 70%, transparent) var(--pct, 20%)),
+      linear-gradient(to right, #cf222e 0%, #e16f24 30%, #d4a72c 55%, #2da44e 100%);
+  }
+  .battery input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--card); border: 3px solid var(--level, #cf222e); box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .battery input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--card); border: 3px solid var(--level, #cf222e); box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .battery input[type=range]::-moz-range-track { background: transparent; }
+  .battery-scale {
+    display: flex; justify-content: space-between; color: var(--muted); font-size: 12px;
+    margin: 4px calc(3.5em + 28px) 0 0;
+  }
+  @media (max-width: 480px) { .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bin Tracker Settings</h1>
+  <p class="lead">Change the bin tracker's settings over USB, without rebuilding the firmware.</p>
+
+  <div class="card" id="unsupported">
+    <h2>This browser can't connect</h2>
+    This page uses Web Serial, which needs a recent desktop version of Chrome, Edge or Firefox.
+    It also needs the page to be opened from <code>https://</code> or <code>localhost</code>.
+  </div>
+
+  <div class="card">
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">Plug the bin tracker into this computer with a USB-C cable, then connect.</span>
+      <button class="primary" id="connect">Connect</button>
+    </div>
+  </div>
+
+  <div id="message"></div>
+
+  <form id="form" autocomplete="off">
+    <fieldset id="fields" disabled>
+      <div class="card">
+        <h2>Wi-Fi</h2>
+        <label for="wifiSsid">Network name</label>
+        <input type="text" id="wifiSsid" maxlength="32">
+        <div class="hint">2.4GHz networks only.</div>
+        <label for="wifiPassword">Password</label>
+        <input type="password" id="wifiPassword" maxlength="63">
+        <div class="hint" id="passwordHint">Leave blank to keep the current password.</div>
+      </div>
+
+      <div class="card">
+        <h2>Collection address</h2>
+        <label for="councilAddressId">Assessment number</label>
+        <input type="text" id="councilAddressId" inputmode="numeric" maxlength="23">
+        <div class="hint">
+          Search for your address on the
+          <a href="https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html" target="_blank" rel="noopener">Council's collection day page</a>
+          and copy the assessment number shown for your property. It's also the number at the end of the results page's address.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Weather</h2>
+        <label class="check"><input type="checkbox" id="useOnlineWeather"> Show today's outdoor weather (otherwise the board's indoor sensor)</label>
+        <div class="row">
+          <div>
+            <label for="latitude">Latitude</label>
+            <input type="number" id="latitude" step="0.0001" min="-90" max="90">
+          </div>
+          <div>
+            <label for="longitude">Longitude</label>
+            <input type="number" id="longitude" step="0.0001" min="-180" max="180">
+          </div>
+        </div>
+        <div class="hint"><button type="button" class="link" id="locate">Use this computer's location</button></div>
+      </div>
+
+      <div class="card" id="reminders">
+        <h2>Reminders</h2>
+        <label for="binNightHour">Show TONIGHT from</label>
+        <select id="binNightHour"></select>
+        <div class="hint">On the evening before a pickup.</div>
+        <label class="check"><input type="checkbox" id="binNightLed"> Blink the LED at the TONIGHT reminder</label>
+        <label for="lowBatteryPercent">Low battery reminder</label>
+        <div class="battery">
+          <input type="range" id="lowBatteryPercent" min="0" max="50" step="1">
+          <output id="lowBatteryValue" for="lowBatteryPercent"></output>
+        </div>
+        <div class="battery-scale"><span>0%</span><span>25%</span><span>50%</span></div>
+        <div class="hint" id="lowBatteryHint"></div>
+      </div>
+
+      <div class="card">
+        <h2>Display</h2>
+        <label class="check"><input type="checkbox" id="displayFlip"> USB-C end of the board at the top</label>
+        <label class="check"><input type="checkbox" id="displayDithering"> Dither greyscale images (shading instead of a hard threshold)</label>
+      </div>
+
+      <div class="card">
+        <details>
+          <summary>Advanced</summary>
+          <label for="temperatureOffsetC">Indoor sensor temperature correction (°C)</label>
+          <input type="number" id="temperatureOffsetC" step="0.1" min="-20" max="20">
+          <label for="refreshIntervalHours">Fallback refresh interval (hours)</label>
+          <input type="number" id="refreshIntervalHours" min="1" max="168" step="1">
+          <div class="hint">Only used until the clock has been set over Wi-Fi.</div>
+          <label class="check"><input type="checkbox" id="stayAwakeOnUsb"> Stay awake while connected to a computer</label>
+          <div class="hint">Turning this off also stops this page from connecting, except straight after a restart.</div>
+        </details>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="primary" id="save">Save and restart</button>
+        <span class="spacer"></span>
+        <button type="button" id="reset">Reset to defaults</button>
+      </div>
+    </fieldset>
+  </form>
+
+  <div class="card" style="margin-top:16px">
+    <details>
+      <summary>Device log</summary>
+      <div id="log"></div>
+    </details>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+// Protocol (see src/config_service.h): one JSON command per line; replies are
+// lines containing "@@CFG " followed by JSON. Everything else is log output.
+const MARKER = "@@CFG ";
+const ESPRESSIF_USB_VENDOR = 0x303a;
+
+const $ = (id) => document.getElementById(id);
+const BOOL_FIELDS = ["useOnlineWeather", "binNightLed", "displayFlip", "displayDithering", "stayAwakeOnUsb"];
+const NUMBER_FIELDS = ["latitude", "longitude", "lowBatteryPercent", "temperatureOffsetC", "refreshIntervalHours"];
+const TEXT_FIELDS = ["wifiSsid", "councilAddressId"];
+
+let port = null;
+let writer = null;
+let pending = null;      // {resolve, timer} for the request in flight
+let busy = Promise.resolve();
+let wantConnection = false;
+
+for (let h = 0; h < 24; h++) {
+  const option = document.createElement("option");
+  option.value = h;
+  option.textContent = `${String(h).padStart(2, "0")}:00`;
+  $("binNightHour").append(option);
+}
+
+if (!("serial" in navigator) || !window.isSecureContext) {
+  $("unsupported").style.display = "block";
+  $("connect").disabled = true;
+}
+
+function setStatus(text, connected) {
+  $("statusText").textContent = text;
+  $("dot").classList.toggle("on", connected);
+  $("connect").textContent = connected ? "Disconnect" : "Connect";
+}
+
+function showMessage(text, kind) {
+  const el = $("message");
+  el.textContent = text;
+  el.className = kind || "";
+}
+
+function appendLog(line) {
+  const log = $("log");
+  const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
+  log.textContent += line + "\n";
+  if (log.textContent.length > 50000) log.textContent = log.textContent.slice(-40000);
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+function handleLine(line) {
+  const at = line.indexOf(MARKER);
+  if (at < 0) {
+    if (line.trim()) appendLog(line);
+    return;
+  }
+  if (at > 0) appendLog(line.slice(0, at));
+  let reply;
+  try { reply = JSON.parse(line.slice(at + MARKER.length)); } catch { return; }
+  if (pending) {
+    clearTimeout(pending.timer);
+    const { resolve } = pending;
+    pending = null;
+    resolve(reply);
+  }
+}
+
+// Sends a command and waits for its reply. Requests run one at a time.
+function request(command, timeoutMs = 5000) {
+  const run = () => new Promise(async (resolve) => {
+    if (!writer) return resolve(null);
+    pending = {
+      resolve,
+      timer: setTimeout(() => { pending = null; resolve(null); }, timeoutMs),
+    };
+    try {
+      await writer.write(new TextEncoder().encode(JSON.stringify(command) + "\n"));
+    } catch {
+      clearTimeout(pending.timer);
+      pending = null;
+      resolve(null);
+    }
+  });
+  busy = busy.then(run, run);
+  return busy;
+}
+
+async function readLoop(p) {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (p.readable) {
+    const reader = p.readable.getReader();
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf("\n")) >= 0) {
+          handleLine(buffer.slice(0, nl).replace(/\r$/, ""));
+          buffer = buffer.slice(nl + 1);
+        }
+      }
+    } catch {
+      break;  // the device went away (unplugged or restarting)
+    } finally {
+      reader.releaseLock();
+    }
+  }
+}
+
+async function openPort(p) {
+  await p.open({ baudRate: 115200 });
+  port = p;
+  writer = p.writable.getWriter();
+  readLoop(p).finally(() => onPortClosed(p));
+  setStatus("Connected. Waiting for the bin tracker to answer...", true);
+
+  // The board may still be busy with its refresh just after it starts, so
+  // keep asking for up to 45 seconds.
+  let hello = null;
+  for (let i = 0; i < 30 && !hello && port === p; i++) hello = await request({ cmd: "hello" }, 1500);
+  if (!hello) {
+    setStatus("Connected, but no answer. Is this the bin tracker, and is it running this firmware?", true);
+    return;
+  }
+  await loadSettings();
+}
+
+async function onPortClosed(p) {
+  if (port !== p) return;
+  try { writer && writer.releaseLock(); } catch {}
+  try { await p.close(); } catch {}
+  port = null;
+  writer = null;
+  $("fields").disabled = true;
+  setStatus(wantConnection ? "Reconnecting..." : "Disconnected.", false);
+}
+
+async function loadSettings() {
+  const reply = await request({ cmd: "get" });
+  if (!reply || !reply.ok) {
+    setStatus("Couldn't read the settings. Try reconnecting.", true);
+    return;
+  }
+  const s = reply.settings;
+  for (const f of TEXT_FIELDS) $(f).value = s[f] ?? "";
+  for (const f of NUMBER_FIELDS) $(f).value = s[f] ?? "";
+  for (const f of BOOL_FIELDS) $(f).checked = !!s[f];
+  $("binNightHour").value = s.binNightHour;
+  updateBatterySlider();
+  $("wifiPassword").value = "";
+  $("passwordHint").textContent = s.wifiPasswordSet
+    ? "A password is saved. Leave blank to keep it."
+    : "No password saved. Leave blank for an open network.";
+  $("fields").disabled = false;
+  setStatus("Connected to the bin tracker.", true);
+}
+
+// Colour for a charge level, matching the slider's track.
+function levelColour(percent) {
+  if (percent < 15) return "#cf222e";
+  if (percent < 28) return "#e16f24";
+  if (percent < 40) return "#d4a72c";
+  return "#2da44e";
+}
+
+function updateBatterySlider() {
+  const slider = $("lowBatteryPercent");
+  const value = Number(slider.value);
+  const box = slider.closest(".battery");
+  box.style.setProperty("--level", levelColour(value));
+  slider.style.setProperty("--pct", `${(value / Number(slider.max)) * 100}%`);
+  $("lowBatteryValue").textContent = `${value}%`;
+  $("lowBatteryHint").textContent = value === 0
+    ? "Off: the LED never blinks for low battery."
+    : `The LED double-blinks every 10 minutes once the battery drops below ${value}%, `
+      + `and stops above ${value + 5}%.`;
+}
+$("lowBatteryPercent").addEventListener("input", updateBatterySlider);
+updateBatterySlider();
+
+function collectSettings() {
+  const s = {};
+  for (const f of TEXT_FIELDS) s[f] = $(f).value.trim();
+  for (const f of NUMBER_FIELDS) s[f] = Number($(f).value);
+  for (const f of BOOL_FIELDS) s[f] = $(f).checked;
+  s.binNightHour = Number($("binNightHour").value);
+  if ($("wifiPassword").value) s.wifiPassword = $("wifiPassword").value;
+  return s;
+}
+
+$("connect").addEventListener("click", async () => {
+  showMessage("");
+  if (port) {
+    wantConnection = false;
+    const p = port;
+    port = null;
+    try { await p.close(); } catch {}
+    setStatus("Disconnected.", false);
+    $("fields").disabled = true;
+    return;
+  }
+  try {
+    const p = await navigator.serial.requestPort({ filters: [{ usbVendorId: ESPRESSIF_USB_VENDOR }] });
+    wantConnection = true;
+    await openPort(p);
+  } catch (e) {
+    if (e.name !== "NotFoundError") showMessage(`Couldn't connect: ${e.message}`, "error");
+  }
+});
+
+// After a restart the board's USB port disappears and comes back. Reopen it
+// automatically if the user hadn't disconnected.
+if ("serial" in navigator) {
+  navigator.serial.addEventListener("connect", async (e) => {
+    if (!wantConnection || port) return;
+    try { await openPort(e.target); } catch {}
+  });
+}
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showMessage("");
+  const settings = collectSettings();
+  const reply = await request({ cmd: "set", settings });
+  if (!reply) return showMessage("No answer from the bin tracker. Check it's still connected.", "error");
+  if (!reply.ok) return showMessage(reply.error, "error");
+  showMessage("Saved. The bin tracker is restarting to apply the new settings.", "ok");
+  $("fields").disabled = true;
+  await request({ cmd: "restart" }, 2000);
+});
+
+$("reset").addEventListener("click", async () => {
+  if (!confirm("Forget all saved settings and go back to the defaults built into the firmware?")) return;
+  showMessage("");
+  const reply = await request({ cmd: "reset" });
+  if (!reply || !reply.ok) return showMessage((reply && reply.error) || "No answer from the bin tracker.", "error");
+  showMessage("Settings reset to the firmware defaults. Restarting.", "ok");
+  $("fields").disabled = true;
+  await request({ cmd: "restart" }, 2000);
+});
+
+$("locate").addEventListener("click", () => {
+  if (!navigator.geolocation) return showMessage("This browser can't share its location.", "error");
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      $("latitude").value = pos.coords.latitude.toFixed(4);
+      $("longitude").value = pos.coords.longitude.toFixed(4);
+    },
+    () => showMessage("Couldn't get this computer's location.", "error"),
+  );
+});
+</script>
+</body>
+</html>

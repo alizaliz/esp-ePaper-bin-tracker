@@ -21,6 +21,10 @@ constexpr size_t MAX_BYTES = 96 * 1024;
 
 bool fetchCollectionDays(const std::string& address_id, int reference_year,
                          std::vector<CollectionDay>& days) {
+  if (address_id.empty()) {
+    ESP_LOGW(TAG, "no Council address ID set; use the config page");
+    return false;
+  }
   const std::string url = PAGE_URL + address_id + ".html";
   std::string html;
   html.reserve(24 * 1024);

@@ -20,8 +20,9 @@
 #include "battery.h"
 #include "board_pins.h"
 #include "board_power.h"
+#include "config_service.h"
 #include "collection_types.h"
-#include "config.h"
+#include "settings.h"
 #include "display_manager.h"
 #include "network.h"
 #include "shtc3.h"
@@ -158,7 +159,7 @@ static time_t local_time_on(const Date& date, int hour, int minute) {
 // BIN_NIGHT_HOUR on the evening before the next pickup.
 static time_t bin_night_start(void) {
   const Date& p = last_schedule.pickup;
-  return local_time_on({p.year, p.month, p.day - 1}, BIN_NIGHT_HOUR, 0);
+  return local_time_on({p.year, p.month, p.day - 1}, settings::get().binNightHour, 0);
 }
 
 // From BIN_NIGHT_HOUR the evening before a pickup until midnight.
@@ -183,7 +184,7 @@ static time_t schedule_next_refresh(bool refresh_ok) {
   } else {
     // Without the time of day, fall back to a fixed interval. time() still
     // counts up through deep sleep even when it hasn't been set.
-    next = now + (time_t)REFRESH_INTERVAL_HOURS * 60 * 60;
+    next = now + (time_t)settings::get().refreshIntervalHours * 60 * 60;
   }
 
   if (!refresh_ok && failed_refreshes <= MAX_RETRIES) {
@@ -201,6 +202,7 @@ static time_t schedule_next_refresh(bool refresh_ok) {
 // retry is due when the board next wakes.
 static void awake_cap_expired(void*) {
   printf("Awake for more than %d s: forcing deep sleep\n", MAX_AWAKE_S);
+  config_service::stop();
   failed_refreshes++;
   next_refresh = time(nullptr) + RETRY_INTERVAL_S;
   esp_sleep_enable_ext1_wakeup_io(1ULL << PWR_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
@@ -222,15 +224,15 @@ static void start_awake_cap(void) {
 // sleep once it's unplugged. A USB charger or power bank doesn't count as
 // connected, so battery behaviour is unchanged.
 static void stay_awake_while_usb_connected(void) {
-  if (!STAY_AWAKE_ON_USB) return;
+  if (!settings::get().stayAwakeOnUsb) return;
   vTaskDelay(pdMS_TO_TICKS(200));  // give the USB host time to start polling
   if (!usb_serial_jtag_is_connected()) return;
 
   // Staying awake is intended here, so the awake time cap no longer applies.
   if (awake_cap_timer != nullptr) esp_timer_stop(awake_cap_timer);
 
-  printf("Computer connected over USB: staying awake for flashing and logs. "
-         "Unplug to sleep, or press PWR to restart.\n");
+  printf("Computer connected over USB: staying awake for flashing, logs and the config "
+         "page. Unplug to sleep, or press PWR to restart.\n");
   // Only act on a press that starts while awake, not one still held from
   // waking the board.
   bool armed = !pwr_button_pressed();
@@ -260,6 +262,7 @@ static void enter_deep_sleep(void) {
   esp_sleep_enable_ext1_wakeup_io(1ULL << PWR_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
 
   printf("Deep sleeping for %lld minutes\n", sleep_s / 60);
+  config_service::stop();
   esp_sleep_enable_timer_wakeup((uint64_t)sleep_s * 1000000ULL);
   esp_deep_sleep_start();
 }
@@ -273,9 +276,9 @@ static int check_battery(void) {
     return -1;
   }
   const int percent = battery::percentFromVoltage(volts);
-  if (percent < LOW_BATTERY_PERCENT) {
+  if (percent < settings::get().lowBatteryPercent) {
     battery_low = true;
-  } else if (percent > LOW_BATTERY_PERCENT + 5) {
+  } else if (percent > settings::get().lowBatteryPercent + 5) {
     battery_low = false;
   }
   printf("Battery: %.2f V, %d %%%s\n", volts, percent, battery_low ? " (low)" : "");
@@ -323,7 +326,7 @@ static Climate read_sensor(void) {
   Climate climate = {};
   if (shtc3::read(climate.temperatureC, climate.humidityPct) == ESP_OK) {
     climate.valid = true;
-    climate.temperatureC += TEMPERATURE_OFFSET_C;
+    climate.temperatureC += settings::get().temperatureOffsetC;
     printf("Sensor: %.1f C, %.1f %%\n", climate.temperatureC, climate.humidityPct);
   } else {
     printf("Failed to read the temperature and humidity sensor\n");
@@ -333,7 +336,7 @@ static Climate read_sensor(void) {
 
 static Climate fetch_weather(void) {
   Climate climate = {};
-  if (weather::fetchDailyMean(WEATHER_LATITUDE, WEATHER_LONGITUDE, climate.temperatureC,
+  if (weather::fetchDailyMean(settings::get().latitude, settings::get().longitude, climate.temperatureC,
                               climate.humidityPct) == ESP_OK) {
     climate.valid = true;
     printf("Weather (today's mean): %.1f C, %.1f %%\n", climate.temperatureC,
@@ -347,8 +350,8 @@ static Climate fetch_weather(void) {
 // Fetches the schedule and works out the next pickup day and which bins go out.
 static bool fetch_schedule(Schedule& schedule) {
   std::vector<CollectionDay> days;
-  if (!auckland_council::fetchCollectionDays(COUNCIL_ADDRESS_ID, reference_year(), days)) {
-    printf("Failed to fetch collection dates for address ID %s\n", COUNCIL_ADDRESS_ID);
+  if (!auckland_council::fetchCollectionDays(settings::get().councilAddressId, reference_year(), days)) {
+    printf("Failed to fetch collection dates for address ID %s\n", settings::get().councilAddressId);
     return false;
   }
 
@@ -430,7 +433,7 @@ static bool full_refresh(int battery_pct) {
     if (network::syncTime(NTP_TIMEOUT_MS) != ESP_OK) {
       printf("Failed to sync the clock\n");
     }
-    if (USE_ONLINE_WEATHER) {
+    if (settings::get().useOnlineWeather) {
       weather = fetch_weather();
     }
     Schedule schedule;
@@ -483,6 +486,8 @@ extern "C" void app_main(void) {
   if (storage::init() != ESP_OK) {
     printf("Flash storage init failed\n");
   }
+  settings::load();
+  config_service::start();
   // RTC memory is cleared by power loss and reflashing; fall back to the copy
   // in flash.
   if (!last_schedule.valid) {
@@ -511,7 +516,7 @@ extern "C" void app_main(void) {
 
   if (battery_low) {
     blink_led("Battery low", LOW_BATTERY_BLINK);
-  } else if (tonight && BIN_NIGHT_LED) {
+  } else if (tonight && settings::get().binNightLed) {
     blink_led("Bin night", BIN_NIGHT_BLINK);
   }
 

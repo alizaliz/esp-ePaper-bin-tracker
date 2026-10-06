@@ -1,16 +1,21 @@
 #pragma once
 
-// Copy this file to src/config.h and fill in the device's real values before
-// flashing. src/config.h is git-ignored so credentials are never committed.
+// Default settings, built into the firmware. Settings saved from the config
+// page (docs/config/index.html, over USB) override these and are kept in
+// flash, so you normally don't need to edit this file.
+//
+// Optional: to build your own values in as defaults, copy this file to
+// src/config.h and edit it. src/config.h is git-ignored, so credentials are
+// never committed. Without it, the build uses this file.
 
 // Wi-Fi network (2.4GHz) used to fetch the schedule and weather and set the clock.
-#define WIFI_SSID "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
 
 // Auckland Council address ID. Look your address up at
 // https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html
 // The results page URL ends in /<address ID>.html.
-#define COUNCIL_ADDRESS_ID "12342478585"
+#define COUNCIL_ADDRESS_ID ""
 
 // 1: show today's average outdoor temperature and humidity from Open-Meteo,
 // falling back to the onboard sensor if Wi-Fi or the request fails. 0: always use the

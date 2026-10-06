@@ -44,4 +44,14 @@ esp_err_t load(const char* key, void* data, size_t size) {
   return err;
 }
 
+esp_err_t erase(const char* key) {
+  nvs_handle_t handle;
+  ESP_RETURN_ON_ERROR(nvs_open(NAMESPACE, NVS_READWRITE, &handle), TAG, "open failed");
+  esp_err_t err = nvs_erase_key(handle, key);
+  if (err == ESP_ERR_NVS_NOT_FOUND) err = ESP_OK;
+  if (err == ESP_OK) err = nvs_commit(handle);
+  nvs_close(handle);
+  return err;
+}
+
 }  // namespace storage

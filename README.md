@@ -15,7 +15,7 @@ A battery-powered e-paper display that shows your next Auckland Council rubbish,
 ### What you need
 - The Waveshare ESP32-C6 1.54" e-Paper board, and a USB-C data cable
 - Optional: a 3.7V lithium battery with an MX1.25 plug (it charges over USB-C)
-- A computer with Python 3.10 or later
+- A computer with Python 3.10 or later, and Chrome, Edge or Firefox
 
 ### 1. Install the tools
 ```sh
@@ -24,50 +24,54 @@ source .venv/bin/activate
 pip install platformio
 ```
 
-### 2. Configure
-```sh
-cp src/config.example.h src/config.h
-```
-Edit `src/config.h`. It's git-ignored, so your Wi-Fi password is never committed. These three settings are required:
-
-| Setting | What to put |
-| --- | --- |
-| `WIFI_SSID`, `WIFI_PASSWORD` | Your Wi-Fi network. It must be 2.4GHz. |
-| `COUNCIL_ADDRESS_ID` | Your address's ID on the Council website. Search for your address on the [collection day page](https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html). The results page URL ends in `/<address ID>.html`. |
-| `WEATHER_LATITUDE`, `WEATHER_LONGITUDE` | Your location for the weather, in decimal degrees, e.g. `-36.85` and `174.76`. |
-
-<details>
-<summary>Optional settings</summary>
-
-| Setting | Default | What it does |
-| --- | --- | --- |
-| `BIN_NIGHT_HOUR` | `18` | Hour (24h) on the evening before a pickup when `TONIGHT` appears |
-| `BIN_NIGHT_LED` | `1` | Blink the LED at the bin night reminder |
-| `LOW_BATTERY_PERCENT` | `10` | Charge below which the LED blinks as a reminder to charge |
-| `USE_ONLINE_WEATHER` | `1` | `0` shows the onboard sensor (indoor) instead of the online weather |
-| `TEMPERATURE_OFFSET_C` | `0.0f` | Correction added to the onboard sensor's temperature |
-| `DISPLAY_FLIP` | `1` | Rotate the screen so the USB-C end of the board is at the top |
-| `DISPLAY_DITHERING` | `0` | `1` shows greyscale images as dithered shading instead of a hard threshold |
-| `REFRESH_INTERVAL_HOURS` | `24` | Fallback wake interval while the clock hasn't been set |
-| `STAY_AWAKE_ON_USB` | `1` | Stay awake while connected to a computer, for flashing and logs |
-
-</details>
-
-### 3. Build and flash
+### 2. Build and flash
 Plug the board in, then:
 ```sh
 pio run -t upload      # build and flash
-pio device monitor     # watch the log (Ctrl+C to exit)
+pio device monitor     # optional: watch the log (Ctrl+C to exit)
 ```
-The first build downloads the ESP-IDF toolchain and LVGL, which takes a few minutes.
+The first build downloads the ESP-IDF toolchain and LVGL, which takes a few minutes. The firmware doesn't need any of your details built in.
+
+### 3. Configure it from the settings page
+Settings are made in a web page that talks to the board over USB, and are saved on the board.
+
+1. Start the page: `python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/config`
+2. Open **http://localhost:8765** in a recent desktop Chrome, Edge or Firefox.
+3. Click **Connect** and choose the bin tracker. Close `pio device monitor` first, as only one program can use the port.
+4. Fill in your **Wi-Fi network**, your **Assessment number**, and your **location** for the weather. To find the Assessment number, search for your address on the [Council's collection day page](https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html); it's also the number at the end of the results page's address.
+5. Click **Save and restart**.
+
+The page also sets the reminder time, the low battery level, the screen orientation and more. Come back to it any time to change them. The Wi-Fi password is never shown, and stays as it is unless you type a new one.
+
+<details>
+<summary>All settings</summary>
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| Wi-Fi network and password | none | Must be a 2.4GHz network |
+| Assessment number | none | Identifies your address on the Council website |
+| Outdoor weather | on | Off shows the onboard sensor (indoor) instead |
+| Latitude and longitude | central Auckland | Location for the weather |
+| Show TONIGHT from | 18:00 | Time on the evening before a pickup when the reminder appears |
+| Blink the LED at TONIGHT | on | |
+| Low battery reminder | 10% | The LED double-blinks below this charge. 0 turns it off. |
+| USB-C end at the top | on | Rotates the screen 180° |
+| Dither greyscale images | off | Shading instead of a hard threshold |
+| Indoor sensor correction | 0°C | Added to the onboard sensor's temperature |
+| Fallback refresh interval | 24 hours | Only used until the clock has been set |
+| Stay awake on USB | on | Keeps the board awake while a computer is connected, for flashing, logs and this page |
+
+To build your own defaults into the firmware instead, copy `src/config.example.h` to `src/config.h` (git-ignored) and edit it. Settings saved from the page override them.
+
+</details>
 
 ### 4. Check it's working
-Within about 15 seconds the screen redraws, and the log shows something like:
+Within about 15 seconds of restarting, the screen redraws. The log (in `pio device monitor`, or under **Device log** on the settings page) shows something like:
 ```
 Weather (today's mean): 13.6 C, 73.0 %
 Next pickup 2026-10-08: rubbish 1, recycling 1, food scraps 1
 Next refresh at 2026-10-07 00:05
-Computer connected over USB: staying awake for flashing and logs.
+Computer connected over USB: staying awake for flashing, logs and the config page.
 ```
 While it's plugged into a computer, the board stays awake. Unplug it, or run it from a battery or USB charger, and it sleeps until the next refresh.
 
@@ -77,9 +81,11 @@ While it's plugged into a computer, the board stays awake. Unplug it, or run it 
 | Problem | Fix |
 | --- | --- |
 | Upload can't find or connect to the board | The board is probably asleep, so its USB is off. Disconnect the battery, hold **BOOT** while unplugging and replugging USB-C, then upload again. |
+| Settings page can't connect | Close `pio device monitor` or anything else using the port. If the board is asleep, press **PWR** to wake it. |
 | `Failed to resolve component 'lvgl__lvgl'` | A one-off PlatformIO ordering issue on the first build after a clean. Run the build again. |
+| `no Wi-Fi network set` | Set up Wi-Fi on the settings page. |
 | `no connection to "<SSID>"` | Check the Wi-Fi name and password, and that the network is 2.4GHz. |
-| `collection dates not found` | Check `COUNCIL_ADDRESS_ID`. If it's right, the Council website layout may have changed (see Data sources under [How it works](#how-it-works)). |
+| `collection dates not found` | Check the Assessment number. If it's right, the Council website layout may have changed (see Data sources under [How it works](#how-it-works)). |
 | Screen shows `--` for temperature and humidity | Neither the online weather nor the onboard sensor could be read. |
 
 </details>
@@ -137,7 +143,7 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 <details>
 <summary>Data sources</summary>
 
-- **Collection days:** the Council's collection day page for your address, `.../rubbish-recycling-collection-days/<address ID>.html`. The page is about 2.7MB, but the household collection dates are in the first ~16KB, so the board stops reading once it has them. Dates come without a year, such as `Thursday, 8 October`, so the year is taken as the one in which that date falls on that weekday. This relies on the page's HTML rather than a published API, so a site redesign can break it.
+- **Collection days:** the Council's collection day page for your address, `.../rubbish-recycling-collection-days/<assessment number>.html`. The page is about 2.7MB, but the household collection dates are in the first ~16KB, so the board stops reading once it has them. Dates come without a year, such as `Thursday, 8 October`, so the year is taken as the one in which that date falls on that weekday. This relies on the page's HTML rather than a published API, so a site redesign can break it.
 - **Weather:** [Open-Meteo](https://open-meteo.com) daily mean temperature and humidity for your location, in Auckland time. It's free and needs no API key.
 - **Time:** NTP from `nz.pool.ntp.org`, on every wake that gets online. The clock keeps running through deep sleep.
 
@@ -149,7 +155,7 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 - The battery voltage is read through the board's divider on GPIO0 and converted to a percentage with a lithium polymer discharge curve. With no battery connected, the charger's output reads as full.
 - Every wake keeps the board's battery power hold switched on. The panel is powered only while it's being redrawn.
 - The low battery LED uses light sleep between blinks, so the 10-minute reminder wakes cost little.
-- Deep sleep turns off USB, so a sleeping board can't be flashed. Staying awake while a computer is connected avoids that during development; set `STAY_AWAKE_ON_USB` to `0` to test real sleep while plugged in. Chargers and power banks don't count as a computer.
+- Deep sleep turns off USB, so a sleeping board can't be flashed or configured. It stays awake while a computer is connected; turn off **Stay awake on USB** to test real sleep while plugged in. Chargers and power banks don't count as a computer.
 
 </details>
 
@@ -164,7 +170,10 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 | `src/auckland_council_client.*`, `src/council_parser.*` | Fetch and parse the collection day page |
 | `src/weather_client.*` | Daily average weather from Open-Meteo |
 | `src/network.*`, `src/https_client.*` | Wi-Fi, NTP and streaming HTTPS |
-| `src/storage.*` | The last schedule, saved in flash (NVS) |
+| `src/storage.*` | Values saved in flash (NVS): the last schedule and the settings |
+| `src/settings.*` | Settings: `config.h` defaults overridden by values saved from the page |
+| `src/config_service.*` | Answers the settings page over USB serial |
+| `docs/config/index.html` | The settings page (Web Serial) |
 | `src/display_manager.*`, `src/epd_ssd1681.*` | LVGL setup and the e-paper panel driver |
 | `src/ui/bin_screen.*` | Screen layout: plain LVGL, previewable on a computer |
 | `src/ui/mono_convert.*` | Greyscale to black and white, and the 180° flip |

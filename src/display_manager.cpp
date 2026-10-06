@@ -5,7 +5,7 @@
 #include "esp_timer.h"
 
 #include "board_power.h"
-#include "config.h"
+#include "settings.h"
 #include "ui/mono_convert.h"
 
 namespace {
@@ -48,12 +48,12 @@ void DisplayManager::flush(lv_display_t* display, const lv_area_t* area, uint8_t
   // Full render mode always hands over the whole screen in one call.
   LV_UNUSED(area);
   auto* self = static_cast<DisplayManager*>(lv_display_get_user_data(display));
-  if (DISPLAY_DITHERING) {
+  if (settings::get().displayDithering) {
     mono::dither(px_map, self->frame_, WIDTH, HEIGHT);
   } else {
     mono::threshold(px_map, self->frame_, WIDTH, HEIGHT);
   }
-  if (DISPLAY_FLIP) {
+  if (settings::get().displayFlip) {
     mono::rotate180(self->frame_, WIDTH, HEIGHT);
   }
   lv_display_flush_ready(display);
