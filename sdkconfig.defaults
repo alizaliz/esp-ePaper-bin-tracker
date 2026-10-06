@@ -20,3 +20,8 @@ CONFIG_LV_FONT_MONTSERRAT_20=y
 # LVGL rendering and PNG decoding run in app_main and need more than the
 # default ~4KB main task stack.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# Faster Wi-Fi reconnects: ask the router for the last IP address instead of
+# negotiating a new one, and don't wait to check the address is unused.
+CONFIG_LWIP_DHCP_RESTORE_LAST_IP=y
+CONFIG_LWIP_DHCP_DOES_NOT_CHECK_OFFERED_IP=y

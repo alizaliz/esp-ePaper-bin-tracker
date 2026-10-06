@@ -240,10 +240,28 @@ static void start_awake_cap(void) {
 // monitored. While a computer is connected over USB, stay awake instead and
 // sleep once it's unplugged. A USB charger or power bank doesn't count as
 // connected, so battery behaviour is unchanged.
+// Waits up to `ms` for a computer to be polling the USB port.
+static bool usb_host_present(int ms) {
+  for (int waited = 0; !usb_serial_jtag_is_connected(); waited += 100) {
+    if (waited >= ms) return false;
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+  return true;
+}
+
 static void stay_awake_while_usb_connected(void) {
   if (!settings::get().stayAwakeOnUsb) return;
-  vTaskDelay(pdMS_TO_TICKS(200));  // give the USB host time to start polling
-  if (!usb_serial_jtag_is_connected()) return;
+  // A reset from the computer (flashing, the serial monitor) can briefly drop
+  // the USB connection while the firmware starts, and a quick refresh can
+  // finish before the computer reconnects. After a reset or power on, give it
+  // a few seconds; timer and PWR wakes, the normal case on battery, only need
+  // a short check.
+  const uint32_t causes = esp_sleep_get_wakeup_causes();
+  const bool woke_from_sleep =
+      causes & (BIT(ESP_SLEEP_WAKEUP_TIMER) | BIT(ESP_SLEEP_WAKEUP_EXT1));
+  if (!usb_host_present(woke_from_sleep ? 300 : 3000)) return;
+  // The config page channel may not have started if USB was down at boot.
+  config_service::start();
 
   // Staying awake is intended here, so the awake time cap no longer applies.
   if (awake_cap_timer != nullptr) esp_timer_stop(awake_cap_timer);
@@ -296,7 +314,8 @@ static void enter_deep_sleep(void) {
   }
   esp_sleep_enable_ext1_wakeup_io(1ULL << PWR_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
 
-  printf("Deep sleeping for %lld minutes\n", sleep_s / 60);
+  printf("Awake for %lld ms; deep sleeping for %lld minutes\n", esp_timer_get_time() / 1000,
+         sleep_s / 60);
   config_service::stop();
   esp_sleep_enable_timer_wakeup((uint64_t)sleep_s * 1000000ULL);
   esp_deep_sleep_start();

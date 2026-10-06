@@ -114,8 +114,9 @@ void listen(void*) {
 }  // namespace
 
 void start() {
+  if (running) return;
   vTaskDelay(pdMS_TO_TICKS(100));  // give the USB host time to start polling
-  if (running || !usb_serial_jtag_is_connected()) return;
+  if (!usb_serial_jtag_is_connected()) return;
 
   usb_serial_jtag_driver_config_t config = USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
   config.rx_buffer_size = 1024;

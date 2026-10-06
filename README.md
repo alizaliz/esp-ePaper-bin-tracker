@@ -129,7 +129,7 @@ The board spends almost all its time in deep sleep. The e-paper screen keeps its
 
 | When | What happens |
 | --- | --- |
-| **00:05** every night | Full refresh: connect to Wi-Fi, set the clock, fetch the schedule and weather, check for a firmware update, redraw the screen, then sleep. Takes about 10 seconds. |
+| **00:05** every night | Full refresh: connect to Wi-Fi, set the clock, fetch the schedule and weather, check for a firmware update, redraw the screen, then sleep. Takes a few seconds; Wi-Fi itself usually connects in under a second. |
 | **18:00** the evening before a pickup | Full refresh showing `TONIGHT`, and a slow blink of the LED for 10 seconds |
 | After a failed refresh | Retry in an hour, up to three times, then return to the normal schedule |
 | Every 10 minutes, while the battery is low | Double-blink the LED for 10 seconds, then sleep again. No Wi-Fi or redraw. |
@@ -176,6 +176,7 @@ Once a night, after fetching the schedule, the board checks this project's [late
 <summary>Battery and power</summary>
 
 - The battery voltage is read through the board's divider on GPIO0 and converted to a percentage with a lithium polymer discharge curve. With no battery connected, the charger's output reads as full.
+- Wi-Fi reconnects quickly: the board remembers the router it last used (saved in flash) and connects straight to it without scanning, asks for its previous IP address, and skips the address conflict check. It usually connects in about 0.7 seconds. If the remembered router doesn't answer within 6 seconds, for example after a router change, it forgets it and scans as normal.
 - Every wake keeps the board's battery power hold switched on. The panel is powered only while it's being redrawn.
 - The low battery LED uses light sleep between blinks, so the 10-minute reminder wakes cost little.
 - Deep sleep turns off USB, so a sleeping board can't be flashed or configured. It stays awake while a computer is connected; turn off **Stay awake on USB** to test real sleep while plugged in. Chargers and power banks don't count as a computer.

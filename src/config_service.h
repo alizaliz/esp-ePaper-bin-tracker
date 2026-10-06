@@ -16,7 +16,7 @@
 namespace config_service {
 
 // Starts listening if a computer is connected over USB. Does nothing on
-// battery or a USB charger.
+// battery or a USB charger. Safe to call again; it only starts once.
 void start();
 
 // Stops routing console output through the USB driver, so log output can't
