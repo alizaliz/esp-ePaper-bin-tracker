@@ -11,6 +11,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "ota_updater.h"
 #include "settings.h"
 
 namespace config_service {
@@ -19,6 +20,7 @@ namespace {
 constexpr const char* TAG = "config";
 constexpr size_t MAX_LINE = 1024;
 bool running = false;
+volatile bool update_requested = false;
 
 void reply(cJSON* json) {
   char* text = cJSON_PrintUnformatted(json);
@@ -56,6 +58,7 @@ void handle(const std::string& line) {
   if (command == "hello") {
     cJSON* json = cJSON_CreateObject();
     cJSON_AddStringToObject(json, "device", "esp-ePaper-bin-tracker");
+    cJSON_AddStringToObject(json, "version", ota::currentVersion());
     replyOk(json);
   } else if (command == "get") {
     cJSON* json = cJSON_CreateObject();
@@ -82,6 +85,9 @@ void handle(const std::string& line) {
     replyOk();
     vTaskDelay(pdMS_TO_TICKS(200));  // let the reply go out
     esp_restart();
+  } else if (command == "update") {
+    update_requested = true;
+    replyOk();
   } else {
     replyError("unknown command");
   }
@@ -122,6 +128,12 @@ void start() {
   xTaskCreate(listen, "config", 6 * 1024, nullptr, 3, nullptr);
   running = true;
   ESP_LOGI(TAG, "config page can connect over USB");
+}
+
+bool takeUpdateRequest() {
+  if (!update_requested) return false;
+  update_requested = false;
+  return true;
 }
 
 void stop() {

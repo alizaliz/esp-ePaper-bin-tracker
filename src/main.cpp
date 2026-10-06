@@ -26,6 +26,7 @@
 #include "settings.h"
 #include "display_manager.h"
 #include "network.h"
+#include "ota_updater.h"
 #include "shtc3.h"
 #include "storage.h"
 #include "weather_client.h"
@@ -47,6 +48,12 @@ static const int MAX_RETRIES = 3;
 static const int MAX_AWAKE_S = 90;
 
 static const int LED_BLINK_DURATION_S = 10;
+
+// Firmware updates: checked at most this often, and only with enough charge
+// for the download, which keeps the radio on for up to a minute.
+static const int UPDATE_CHECK_INTERVAL_S = 20 * 60 * 60;
+static const int UPDATE_MIN_BATTERY_PERCENT = 30;
+static const int UPDATE_MAX_AWAKE_S = 5 * 60;
 
 // A schedule older than this is shown as possibly out of date.
 static const int STALE_AFTER_S = 48 * 60 * 60;
@@ -82,6 +89,7 @@ RTC_DATA_ATTR static int failed_refreshes = 0;
 // Set after a successful fetch. RTC memory is cleared by power loss, so this
 // is false until the first fetch after power returns.
 RTC_DATA_ATTR static bool fetched_since_power_on = false;
+RTC_DATA_ATTR static time_t last_update_check = 0;
 
 static esp_timer_handle_t awake_cap_timer = nullptr;
 
@@ -211,6 +219,14 @@ static void awake_cap_expired(void*) {
   esp_deep_sleep_start();
 }
 
+// Gives a long-running task, like a firmware download, more time before the
+// awake time limit forces deep sleep.
+static void extend_awake_cap(int seconds) {
+  if (awake_cap_timer == nullptr) return;
+  esp_timer_stop(awake_cap_timer);
+  esp_timer_start_once(awake_cap_timer, (uint64_t)seconds * 1000000ULL);
+}
+
 static void start_awake_cap(void) {
   esp_timer_create_args_t args = {};
   args.callback = awake_cap_expired;
@@ -238,6 +254,24 @@ static void stay_awake_while_usb_connected(void) {
   // waking the board.
   bool armed = !pwr_button_pressed();
   while (usb_serial_jtag_is_connected()) {
+    if (config_service::takeUpdateRequest()) {
+      // Asked for by the config page. Development builds can be updated this
+      // way too.
+      printf("Checking for a firmware update...\n");
+      if (network::connect(WIFI_TIMEOUT_MS) == ESP_OK) {
+        const esp_err_t err = ota::checkAndInstall(true);
+        network::disconnect();
+        if (err == ESP_OK) {
+          printf("Update installed: restarting\n");
+          esp_restart();
+        }
+        printf(err == ESP_ERR_NOT_FOUND ? "Firmware is up to date (%s)\n"
+                                        : "Firmware update failed (running %s)\n",
+               ota::currentVersion());
+      } else {
+        printf("Firmware update check failed: no Wi-Fi\n");
+      }
+    }
     if (!pwr_button_pressed()) {
       armed = true;
     } else if (armed) {
@@ -421,6 +455,30 @@ static bool refresh_display(bool online, const Climate& climate, int battery_pct
   return data.isTonight;
 }
 
+// Checks for and installs a firmware update, at most once every
+// UPDATE_CHECK_INTERVAL_S. Must be called while online. Restarts into the new
+// firmware if one was installed.
+static void maybe_update_firmware(int battery_pct) {
+  if (!settings::get().autoUpdate) return;
+  const time_t now = time(nullptr);
+  if (last_update_check != 0 && now - last_update_check < UPDATE_CHECK_INTERVAL_S &&
+      now >= last_update_check) {
+    return;
+  }
+  if (battery_pct >= 0 && battery_pct < UPDATE_MIN_BATTERY_PERCENT) {
+    printf("Battery at %d%%: skipping the firmware update check\n", battery_pct);
+    return;
+  }
+  last_update_check = now;
+  extend_awake_cap(UPDATE_MAX_AWAKE_S);
+  if (ota::checkAndInstall(false) == ESP_OK) {
+    network::disconnect();
+    printf("Firmware update installed: restarting\n");
+    esp_restart();
+  }
+  extend_awake_cap(MAX_AWAKE_S);
+}
+
 // Reads the sensor, goes online for the clock, weather and schedule, and
 // redraws the screen. Returns true if it shows the bin night reminder.
 static bool full_refresh(int battery_pct) {
@@ -440,6 +498,9 @@ static bool full_refresh(int battery_pct) {
     Schedule schedule;
     fetched = fetch_schedule(schedule);
     if (fetched) {
+      // New firmware has proven it can get online and fetch the schedule.
+      ota::markHealthy();
+      maybe_update_firmware(battery_pct);
       schedule.fetchedAt = time(nullptr);
       last_schedule = schedule;
       fetched_since_power_on = true;
@@ -461,6 +522,10 @@ static bool full_refresh(int battery_pct) {
 
   const bool tonight = refresh_display(online, weather.valid ? weather : sensor, battery_pct);
 
+  if (!fetched && ota::isPendingVerify()) {
+    printf("New firmware %s couldn't fetch the schedule; the previous version will be "
+           "restored on the next restart\n", ota::currentVersion());
+  }
   failed_refreshes = fetched ? 0 : failed_refreshes + 1;
   next_refresh = schedule_next_refresh(fetched);
   struct tm next;

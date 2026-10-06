@@ -17,7 +17,7 @@ esp_err_t get(const char* url, size_t max_bytes, const ChunkHandler& on_chunk) {
   config.url = url;
   config.timeout_ms = TIMEOUT_MS;
   config.crt_bundle_attach = esp_crt_bundle_attach;
-  config.buffer_size = 2048;  // response headers must fit
+  config.buffer_size = 4096;  // response headers must fit (GitHub's API sends ~2KB)
   config.user_agent = "esp-ePaper-bin-tracker";
 
   esp_http_client_handle_t client = esp_http_client_init(&config);

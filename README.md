@@ -11,6 +11,7 @@ A battery-powered e-paper display that shows your next Auckland Council rubbish,
 - Today's average temperature and humidity, Wi-Fi status and battery level
 - Keeps working through Wi-Fi outages, and flags the schedule if it may be out of date
 - Blinks the LED when the battery needs charging
+- Updates its own firmware from this project's releases
 
 ## Setup
 
@@ -24,7 +25,7 @@ A battery-powered e-paper display that shows your next Auckland Council rubbish,
 
 Each [release](https://github.com/alizaliz/esp-ePaper-bin-tracker/releases) includes `bin-tracker-<version>-full.bin`, a complete image to flash at address `0x0`. In Chrome or Edge, open [Espressif's web flasher](https://espressif.github.io/esptool-js/), connect to the board, add the file at address `0x0` and click **Program**. Then skip to step 3.
 
-The full image erases the settings saved on the board, so use it to set up a board from scratch. To update a board that's already set up, flash `bin-tracker-<version>-app.bin` at address `0x10000` instead, which keeps its settings.
+The full image erases everything on the board, including saved settings, so use it to set up a board from scratch. A board that's already set up updates itself (see [Firmware updates](#firmware-updates)).
 
 </details>
 
@@ -72,6 +73,7 @@ The page also sets the reminder time, the low battery level, the screen orientat
 | Indoor sensor correction | 0°C | Added to the onboard sensor's temperature |
 | Fallback refresh interval | 24 hours | Only used until the clock has been set |
 | Stay awake on USB | on | Keeps the board awake while a computer is connected, for flashing, logs and this page |
+| Automatic updates | on | Install new firmware releases overnight |
 
 To build your own defaults into the firmware instead, copy `src/config.example.h` to `src/config.h` (git-ignored) and edit it. Settings saved from the page override them.
 
@@ -127,13 +129,21 @@ The board spends almost all its time in deep sleep. The e-paper screen keeps its
 
 | When | What happens |
 | --- | --- |
-| **00:05** every night | Full refresh: connect to Wi-Fi, set the clock, fetch the schedule and weather, redraw the screen, then sleep. Takes about 10 seconds. |
+| **00:05** every night | Full refresh: connect to Wi-Fi, set the clock, fetch the schedule and weather, check for a firmware update, redraw the screen, then sleep. Takes about 10 seconds. |
 | **18:00** the evening before a pickup | Full refresh showing `TONIGHT`, and a slow blink of the LED for 10 seconds |
 | After a failed refresh | Retry in an hour, up to three times, then return to the normal schedule |
 | Every 10 minutes, while the battery is low | Double-blink the LED for 10 seconds, then sleep again. No Wi-Fi or redraw. |
 | PWR press, power on or reset | Full refresh straight away |
 
 Any wake that runs longer than 90 seconds, for example because of a hung network request, is cut short with a retry due in an hour.
+
+### Firmware updates
+Once a night, after fetching the schedule, the board checks this project's [latest release](https://github.com/alizaliz/esp-ePaper-bin-tracker/releases/latest). If it's newer than the running firmware, the board downloads it (about a minute), restarts into it and redraws the screen.
+
+- **Safe to fail:** the update goes into a second firmware slot. New firmware has to fetch the schedule successfully before it's kept; if it crashes or can't, the board goes back to the previous version on its next restart, and won't try that version again.
+- **Skipped** when the battery is below 30%, or for firmware built on a computer (a development build) rather than a release.
+- **Settings page:** shows the running version, has a **Check for updates now** button, and can turn automatic updates off.
+- Saved settings and the schedule are kept across updates.
 
 ### LED and buttons
 | | |
@@ -183,6 +193,7 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 | `src/weather_client.*` | Daily average weather from Open-Meteo |
 | `src/network.*`, `src/https_client.*` | Wi-Fi, NTP and streaming HTTPS |
 | `src/storage.*` | Values saved in flash (NVS): the last schedule and the settings |
+| `src/ota_updater.*` | Firmware updates from GitHub releases, with rollback |
 | `src/settings.*` | Settings: `config.h` defaults overridden by values saved from the page |
 | `src/config_service.*` | Answers the settings page over USB serial |
 | `docs/config/index.html` | The settings page (Web Serial), published with GitHub Pages |
@@ -197,7 +208,7 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 | `tools/preview/` | Renders the screen to PNGs on a computer |
 | `tools/fonts/generate.sh` | Regenerates the fonts |
 | `tools/docs/make_images.py` | Regenerates the README images in `docs/images/` |
-| `sdkconfig.defaults`, `partitions.csv` | ESP-IDF settings and the flash layout (4MB app partition) |
+| `sdkconfig.defaults`, `partitions.csv` | ESP-IDF settings and the flash layout (two 4MB app slots for updates) |
 
 </details>
 
@@ -208,7 +219,8 @@ Any wake that runs longer than 90 seconds, for example because of a hung network
 - `tests/check_live.sh <assessment number>` checks the live Council page still parses, from your own connection. Run it now and then, or if boards start showing the out of date icon. The Council website refuses requests from VPNs and data centres (HTTP 406), including GitHub's servers, which is why this check isn't automated.
 - **CI** (`.github/workflows/ci.yml`) runs on every push: it builds the firmware without `src/config.h`, so it's the same firmware that gets published, with no personal details. It also runs the parser tests and renders the screen previews, failing if anything is off screen. The firmware and previews are attached to each run.
 - **Releases:** push a version tag to publish one, e.g. `git tag v1.0.0 && git push origin v1.0.0`. The release workflow builds the firmware, checks its version matches the tag, and attaches the app image (for over-the-air updates), a full image (for flashing from scratch) and checksums.
-- The firmware's version comes from `git describe`: the tag for release builds, otherwise a commit hash. It's logged at boot.
+- The firmware's version comes from `git describe`: exactly the tag (e.g. `v1.1.0`) for release builds, otherwise something like `v1.1.0-3-gabc1234-dirty`. It's logged at boot. Boards install a release automatically only if it's newer than their version, and never replace a development build overnight; **Check for updates now** on the settings page works on any build.
+- Release versions must be `vX.Y.Z`. Boards compare them numerically, so `v1.10.0` is newer than `v1.9.0`.
 
 </details>
 
@@ -240,6 +252,7 @@ Board specs, pinout and schematic: [Waveshare docs](https://docs.waveshare.com/E
 
 - The e-paper panel is powered through I/O expander pin EXIO0, and the battery power hold is on EXIO5. The expander's registers are written directly and never reset, because a reset would briefly release the power hold.
 - The green LED is on EXIO4 and is active low. The red LED belongs to the charger.
+- Flash layout: two 4MB app slots (`ota_0` at `0x10000`, `ota_1` at `0x410000`) and the OTA record at `0x810000`. Rollback is enabled in the bootloader.
 - The PWR button (GPIO2) can wake the chip from deep sleep. BOOT (GPIO9) can't, so the firmware doesn't use it.
 - The project uses ESP-IDF, not Arduino, through PlatformIO. LVGL and cJSON are ESP-IDF components; `dependencies.lock` pins their versions.
 

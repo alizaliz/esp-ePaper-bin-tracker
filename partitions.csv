@@ -1,5 +1,10 @@
-# Name,   Type, SubType, Offset,  Size
-# 4MB app partition; the rest of the 16MB flash is left free for OTA or storage later.
-nvs,      data, nvs,     0x9000,  0x6000
-phy_init, data, phy,     0xf000,  0x1000
-factory,  app,  factory, 0x10000, 0x400000
+# Name,   Type, SubType, Offset,   Size
+# Two 4MB app slots for over-the-air updates: the board runs from one and
+# downloads updates into the other. nvs keeps its original offset and size,
+# so saved settings survive the change from the old single-app layout, and
+# ota_0 starts where the old app did.
+nvs,      data, nvs,     0x9000,   0x6000
+phy_init, data, phy,     0xf000,   0x1000
+ota_0,    app,  ota_0,   0x10000,  0x400000
+ota_1,    app,  ota_1,   0x410000, 0x400000
+otadata,  data, ota,     0x810000, 0x2000

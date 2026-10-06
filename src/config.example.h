@@ -51,6 +51,14 @@
 // 0. Waveshare's examples use -6 for a board that runs continuously.
 #define TEMPERATURE_OFFSET_C 0.0f
 
+// 1: check GitHub for new firmware during the nightly refresh and install
+// it automatically.
+#define AUTO_UPDATE 1
+
+// GitHub repository whose releases provide firmware updates. Not a setting
+// on the config page; change it here if you publish your own fork.
+#define UPDATE_REPOSITORY "alizaliz/esp-ePaper-bin-tracker"
+
 // 1: stay awake while a computer is connected over USB, so the board can be
 // flashed and monitored without entering download mode. Set to 0 to test real
 // deep sleep while plugged in. Chargers and power banks never keep it awake.

@@ -179,6 +179,16 @@
       </div>
 
       <div class="card">
+        <h2>Firmware</h2>
+        <div class="status">
+          <span id="firmwareVersion" style="flex:1">Version: unknown</span>
+          <button type="button" id="checkUpdate">Check for updates now</button>
+        </div>
+        <label class="check"><input type="checkbox" id="autoUpdate"> Install updates automatically, overnight</label>
+        <div class="hint">Updates come from this project's GitHub releases. If new firmware fails, the board goes back to the previous version.</div>
+      </div>
+
+      <div class="card">
         <details>
           <summary>Advanced</summary>
           <label for="temperatureOffsetC">Indoor sensor temperature correction (°C)</label>
@@ -216,7 +226,7 @@ const MARKER = "@@CFG ";
 const ESPRESSIF_USB_VENDOR = 0x303a;
 
 const $ = (id) => document.getElementById(id);
-const BOOL_FIELDS = ["useOnlineWeather", "binNightLed", "displayFlip", "displayDithering", "stayAwakeOnUsb"];
+const BOOL_FIELDS = ["useOnlineWeather", "binNightLed", "displayFlip", "displayDithering", "stayAwakeOnUsb", "autoUpdate"];
 const NUMBER_FIELDS = ["latitude", "longitude", "lowBatteryPercent", "temperatureOffsetC", "refreshIntervalHours"];
 const TEXT_FIELDS = ["wifiSsid", "councilAddressId"];
 
@@ -334,6 +344,7 @@ async function openPort(p) {
     setStatus("Connected, but no answer. Is this the bin tracker, and is it running this firmware?", true);
     return;
   }
+  $("firmwareVersion").textContent = `Version: ${hello.version || "unknown"}`;
   await loadSettings();
 }
 
@@ -439,6 +450,14 @@ $("form").addEventListener("submit", async (e) => {
   showMessage("Saved. The bin tracker is restarting to apply the new settings.", "ok");
   $("fields").disabled = true;
   await request({ cmd: "restart" }, 2000);
+});
+
+$("checkUpdate").addEventListener("click", async () => {
+  showMessage("");
+  const reply = await request({ cmd: "update" });
+  if (!reply || !reply.ok) return showMessage("No answer from the bin tracker.", "error");
+  showMessage("Checking for updates. If there's a newer version, the bin tracker downloads it (about a minute) "
+    + "and restarts, and this page reconnects. Open the device log below to follow along.", "ok");
 });
 
 $("reset").addEventListener("click", async () => {

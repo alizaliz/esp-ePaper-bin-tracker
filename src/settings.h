@@ -23,6 +23,7 @@ struct Settings {
   float temperatureOffsetC;
   int refreshIntervalHours;
   bool stayAwakeOnUsb;
+  bool autoUpdate;
 };
 
 namespace settings {

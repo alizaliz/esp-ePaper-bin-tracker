@@ -20,9 +20,28 @@ namespace {
 
 constexpr const char* TAG = "settings";
 
-// Flash key. Change it if Settings' layout changes, so an old saved copy is
-// ignored rather than misread.
-constexpr const char* KEY = "settings_v1";
+// Flash key. Change it when Settings' layout changes, and convert the old
+// layout in load(), so saved settings aren't lost.
+constexpr const char* KEY = "settings_v2";
+
+// Layout saved by firmware before automatic updates were added.
+constexpr const char* KEY_V1 = "settings_v1";
+struct SettingsV1 {
+  char wifiSsid[33];
+  char wifiPassword[65];
+  char councilAddressId[24];
+  bool useOnlineWeather;
+  double latitude;
+  double longitude;
+  int binNightHour;
+  bool binNightLed;
+  int lowBatteryPercent;
+  bool displayFlip;
+  bool displayDithering;
+  float temperatureOffsetC;
+  int refreshIntervalHours;
+  bool stayAwakeOnUsb;
+};
 
 Settings current;
 
@@ -42,6 +61,7 @@ Settings defaults() {
   s.temperatureOffsetC = TEMPERATURE_OFFSET_C;
   s.refreshIntervalHours = REFRESH_INTERVAL_HOURS;
   s.stayAwakeOnUsb = STAY_AWAKE_ON_USB;
+  s.autoUpdate = AUTO_UPDATE;
   return s;
 }
 
@@ -90,6 +110,32 @@ void load() {
   if (storage::load(KEY, &saved, sizeof(saved)) == ESP_OK && validate(saved).empty()) {
     current = saved;
     ESP_LOGI(TAG, "using saved settings");
+    return;
+  }
+
+  // Convert settings saved in the older layout, keeping the new fields at
+  // their defaults, and save them in the current one.
+  SettingsV1 old;
+  if (storage::load(KEY_V1, &old, sizeof(old)) == ESP_OK) {
+    Settings converted = defaults();
+    memcpy(converted.wifiSsid, old.wifiSsid, sizeof(old.wifiSsid));
+    memcpy(converted.wifiPassword, old.wifiPassword, sizeof(old.wifiPassword));
+    memcpy(converted.councilAddressId, old.councilAddressId, sizeof(old.councilAddressId));
+    converted.useOnlineWeather = old.useOnlineWeather;
+    converted.latitude = old.latitude;
+    converted.longitude = old.longitude;
+    converted.binNightHour = old.binNightHour;
+    converted.binNightLed = old.binNightLed;
+    converted.lowBatteryPercent = old.lowBatteryPercent;
+    converted.displayFlip = old.displayFlip;
+    converted.displayDithering = old.displayDithering;
+    converted.temperatureOffsetC = old.temperatureOffsetC;
+    converted.refreshIntervalHours = old.refreshIntervalHours;
+    converted.stayAwakeOnUsb = old.stayAwakeOnUsb;
+    if (validate(converted).empty() && save(converted).empty()) {
+      storage::erase(KEY_V1);
+      ESP_LOGI(TAG, "converted saved settings to the current format");
+    }
   }
 }
 
@@ -105,6 +151,7 @@ std::string save(const Settings& updated) {
 
 esp_err_t reset() {
   current = defaults();
+  storage::erase(KEY_V1);
   return storage::erase(KEY);
 }
 
@@ -124,6 +171,7 @@ cJSON* toJson(const Settings& s) {
   cJSON_AddNumberToObject(json, "temperatureOffsetC", s.temperatureOffsetC);
   cJSON_AddNumberToObject(json, "refreshIntervalHours", s.refreshIntervalHours);
   cJSON_AddBoolToObject(json, "stayAwakeOnUsb", s.stayAwakeOnUsb);
+  cJSON_AddBoolToObject(json, "autoUpdate", s.autoUpdate);
   return json;
 }
 
@@ -155,7 +203,7 @@ std::string applyJson(const cJSON* json, Settings& s) {
   const BoolField bools[] = {
       {"useOnlineWeather", &s.useOnlineWeather}, {"binNightLed", &s.binNightLed},
       {"displayFlip", &s.displayFlip},           {"displayDithering", &s.displayDithering},
-      {"stayAwakeOnUsb", &s.stayAwakeOnUsb},
+      {"stayAwakeOnUsb", &s.stayAwakeOnUsb},     {"autoUpdate", &s.autoUpdate},
   };
   for (const BoolField& f : bools) {
     if ((item = cJSON_GetObjectItem(json, f.name)) != nullptr) {
