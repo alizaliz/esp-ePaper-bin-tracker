@@ -5,6 +5,7 @@
 // --live is used by the weekly GitHub Actions check: it fails if the page no
 // longer parses, or the dates it gives are implausible.
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
