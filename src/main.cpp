@@ -476,8 +476,9 @@ static bool refresh_display(bool online, const Climate& climate, int battery_pct
   data.recycling = last_schedule.recycling;
   data.foodScraps = last_schedule.foodScraps;
   data.wifiConnected = online;
-  data.hasBattery = battery_pct >= 0;
-  data.batteryPct = battery_pct;
+  data.batteryLow = battery_low;
+  // Advances by one each night, so the mascot's face varies day to day.
+  data.dayNumber = clock_is_set() ? (int)(time(nullptr) / 86400) : 0;
   data.hasClimate = climate.valid;
   data.temperatureC = (int)lroundf(climate.temperatureC);
   data.humidityPct = (int)lroundf(climate.humidityPct);

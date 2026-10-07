@@ -8,8 +8,9 @@ A battery-powered e-paper display that shows your next Auckland Council rubbish,
 
 - Shows which bins go out on the next pickup day, and when it is
 - Reminds you the evening before (`TONIGHT`) and on the day (`TODAY`)
-- Today's average temperature and humidity, Wi-Fi status and battery level
-- Keeps working through Wi-Fi outages, and flags the schedule if it may be out of date
+- Binny, an emoji mascot whose face changes with the day and the board's mood
+- Today's average temperature and humidity
+- Keeps working through Wi-Fi outages, and only shows status icons when something needs attention
 - Blinks the LED when the battery needs charging
 - Updates its own firmware from this project's releases
 
@@ -69,7 +70,7 @@ The page also sets the reminder time, the low battery level, the screen orientat
 | Blink the LED at TONIGHT | on | |
 | Low battery reminder | 10% | The LED double-blinks below this charge. 0 turns it off. |
 | USB-C end at the top | on | Rotates the screen 180° |
-| Dither greyscale images | off | Shading instead of a hard threshold |
+| Dither greyscale images | off | Shades greys with dots instead of a hard threshold. Binny is already dithered, so this mostly makes text grainier; best left off. |
 | Indoor sensor correction | 0°C | Added to the onboard sensor's temperature |
 | Fallback refresh interval | 24 hours | Only used until the clock has been set |
 | Stay awake on USB | on | Keeps the board awake while a computer is connected, for flashing, logs and this page |
@@ -110,19 +111,20 @@ While it's plugged into a computer, the board stays awake. Unplug it, or run it 
 | Upcoming pickup | Evening before | Pickup day |
 | :---: | :---: | :---: |
 | ![Upcoming pickup](docs/images/screen_upcoming.png) | ![TONIGHT the evening before](docs/images/screen_tonight.png) | ![TODAY on the pickup day](docs/images/screen_today.png) |
-| Rubbish and food scraps go out Thursday; recycling doesn't | From 6pm the evening before | On the day |
+| Rubbish and food scraps go out Thursday | From 6pm the evening before | On the day |
 
-| Out of date | Low battery | Offline |
+| Out of date | Low battery | Several problems |
 | :---: | :---: | :---: |
-| ![Schedule out of date](docs/images/screen_stale.png) | ![Low battery](docs/images/screen_low_battery.png) | ![Offline, with no readings](docs/images/screen_offline.png) |
-| The schedule may be stale | The LED also blinks | No Wi-Fi and no readings |
+| ![Schedule out of date](docs/images/screen_stale.png) | ![Low battery](docs/images/screen_low_battery.png) | ![Offline, low battery and out of date](docs/images/screen_offline.png) |
+| The dates may be old | The LED also blinks | Offline, low battery and out of date |
 
-- **Top row:** Wi-Fi status (slashed if this refresh couldn't get online), temperature, humidity and battery charge.
-- **Bins:** rubbish, recycling and food scraps. A bin with a slash through it isn't collected on the next pickup day.
-- **Bottom:** the next pickup day, e.g. `THU 8`. It becomes `TONIGHT` from 6pm the evening before, then `TODAY` on the day.
-- **Out of date:** a history icon next to the date means the schedule may be stale, so `TODAY` and `TONIGHT` are hidden. This happens when the pickup day has passed, the last successful fetch was over 48 hours ago, or the board lost power and couldn't get online.
+- **Speech bubble:** the next pickup day, e.g. `THU 8`, and icons for the bins going out on it. From 6pm the evening before, the bubble turns black and says `TONIGHT`; on the day it says `TODAY`.
+- **Binny:** the emoji below the bubble. On ordinary days it alternates between happy and cheeky; it's star-struck on bin night, cool in sunglasses on collection day, worried when offline or the dates may be old, and sleepy when the battery is low.
+- **Weather:** today's average temperature and humidity, beside Binny.
+- **Status icons:** only when something needs attention: a slashed Wi-Fi icon when this refresh couldn't get online, a battery when it's low, and a history icon when the dates may be old.
+- **Out of date:** when the pickup day has passed, the last successful fetch was over 48 hours ago, or the board lost power and couldn't get online, the bubble says "Last known" and `TODAY` and `TONIGHT` aren't shown.
 
-Temperature and humidity are today's outdoor average from Open-Meteo. If that can't be fetched, the onboard sensor's indoor reading is used instead.
+Temperature and humidity come from Open-Meteo. If that can't be fetched, the onboard sensor's indoor reading is used instead.
 
 ### Daily routine
 The board spends almost all its time in deep sleep. The e-paper screen keeps its image with no power, so the schedule stays visible.
@@ -157,8 +159,8 @@ Once a night, after fetching the schedule, the board checks this project's [late
 ### When things go wrong
 | Situation | What you see |
 | --- | --- |
-| Wi-Fi down | The last schedule, a slashed Wi-Fi icon and indoor readings. Retries hourly. |
-| Offline for days, or the pickup day has passed | The history icon next to the date |
+| Wi-Fi down | The last schedule, a worried Binny, a slashed Wi-Fi icon and indoor readings. Retries hourly. |
+| Offline for days, or the pickup day has passed | "Last known" in the bubble and the history icon |
 | Power loss | The last schedule is saved in flash, so it's redrawn as soon as power returns |
 | Council website changed | The fetch fails and the last schedule stays on screen. The parser may need updating. |
 
@@ -214,6 +216,8 @@ A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync und
 | `src/stats.*` | Daily battery and activity log |
 | `src/board_power.*`, `src/board_pins.h` | I2C, the I/O expander (panel power, battery hold, LED) and pins |
 | `components/fonts/` | Generated LVGL fonts: Montserrat Bold and Font Awesome icons |
+| `components/mascot/` | Generated mascot images |
+| `tools/mascot/make_emoji.py` | Generates the mascot images |
 | `tools/preview/` | Renders the screen to PNGs on a computer |
 | `tools/fonts/generate.sh` | Regenerates the fonts |
 | `tools/docs/make_images.py` | Regenerates the README images in `docs/images/` |
@@ -241,16 +245,16 @@ pio run                              # once, so LVGL is downloaded
 ./tools/preview/run.sh               # writes PNGs to tools/preview/out/
 python3 tools/docs/make_images.py    # refreshes docs/images/ and the diagram
 ```
-The preview uses the same layout code, fonts and black and white conversion as the firmware. It warns if anything is drawn off screen. It needs a C/C++ compiler and zlib, both included with macOS.
+The preview uses the same layout code, fonts, mascot images and black and white conversion as the firmware. It renders each screen state and each of Binny's faces, and warns if anything is drawn off screen. It needs a C/C++ compiler and zlib, both included with macOS.
 
 </details>
 
 <details>
-<summary>Fonts, icons and images</summary>
+<summary>Fonts, icons and the mascot</summary>
 
 - Fonts are compiled into the firmware as bitmaps and contain only the characters the screen uses. To add characters, icons or sizes, edit `tools/fonts/generate.sh` and run it. It needs Node.js. Then add any new font to `components/fonts/CMakeLists.txt` and `fonts.h`.
 - PNG images can be embedded from `src/assets/`. Add the file to `board_build.embed_files` in `platformio.ini` and declare it in `src/assets.h`. Keep them icon-sized: they're decoded to full colour in RAM.
-- `DISPLAY_DITHERING` chooses between a crisp threshold (best for text and icons) and dithered shading (best for photos).
+- Binny's faces are drawn as SVG in `tools/mascot/make_emoji.py`, which rasterises them, dithers them to black and white, and writes 1-bit LVGL images to `components/mascot/` (about 1KB each). Edit the drawings there and run `python3 tools/mascot/make_emoji.py`; it needs macOS (Quick Look and `sips` do the rasterising). Pre-dithering keeps the shading the same whatever the dithering setting.
 
 </details>
 
@@ -268,7 +272,7 @@ Board specs, pinout and schematic: [Waveshare docs](https://docs.waveshare.com/E
 </details>
 
 ## Licences
-- Project code: MIT (see `LICENSE`)
+- Project code and the mascot artwork: MIT (see `LICENSE`)
 - Montserrat font: SIL Open Font License 1.1
 - Font Awesome Free icons: CC BY 4.0; font files SIL Open Font License 1.1 ([fontawesome.com/license/free](https://fontawesome.com/license/free))
 - Weather data: [Open-Meteo](https://open-meteo.com), CC BY 4.0, free for non-commercial use

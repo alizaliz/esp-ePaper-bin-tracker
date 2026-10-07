@@ -6,21 +6,20 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-LV_FONT_DECLARE(font_bold_40)  // Montserrat Bold: A-Z, 0-9, space
 LV_FONT_DECLARE(font_bold_32)  // Montserrat Bold: A-Z, 0-9, space
 LV_FONT_DECLARE(font_bold_18)  // Montserrat Bold: 0-9 - ° C %
-LV_FONT_DECLARE(icons_60)      // Font Awesome: bin icons
-LV_FONT_DECLARE(icons_22)      // Font Awesome: wifi, thermometer, droplet
-LV_FONT_DECLARE(icons_30)      // Font Awesome: stale data (clock-rotate-left)
+LV_FONT_DECLARE(font_bold_14)  // Montserrat Bold: letters, digits, punctuation
+LV_FONT_DECLARE(icons_30)      // Font Awesome: bin icons
+LV_FONT_DECLARE(icons_18)      // Font Awesome: status icons and droplet
 #ifdef __cplusplus
 }
 #endif
 
 // Font Awesome code points as UTF-8
-#define ICON_TRASH_CAN "\xEF\x8B\xAD"   // U+F2ED
-#define ICON_RECYCLE "\xEF\x86\xB8"     // U+F1B8
-#define ICON_APPLE "\xEF\x97\x91"       // U+F5D1
-#define ICON_WIFI "\xEF\x87\xAB"        // U+F1EB
-#define ICON_THERMOMETER "\xEF\x8B\x89" // U+F2C9
-#define ICON_DROPLET "\xEF\x81\x83"     // U+F043
-#define ICON_STALE "\xEF\x87\x9A"       // U+F1DA clock-rotate-left
+#define ICON_TRASH_CAN "\xEF\x8B\xAD"    // U+F2ED
+#define ICON_RECYCLE "\xEF\x86\xB8"      // U+F1B8
+#define ICON_APPLE "\xEF\x97\x91"        // U+F5D1
+#define ICON_WIFI "\xEF\x87\xAB"         // U+F1EB
+#define ICON_BATTERY_LOW "\xEF\x89\x83"  // U+F243 battery-quarter
+#define ICON_STALE "\xEF\x87\x9A"        // U+F1DA clock-rotate-left
+#define ICON_DROPLET "\xEF\x81\x83"      // U+F043

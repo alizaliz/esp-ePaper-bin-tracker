@@ -4,189 +4,164 @@
 #include <cstdio>
 
 #include "fonts.h"
+#include "mascot.h"
 
 namespace {
 
-// Layout, top to bottom: status row, bin icons, pickup day strip. The bin
-// icons are centred in the space between the other two.
-constexpr int SCREEN_HEIGHT = 200;
-constexpr int STATUS_BOTTOM = 28;     // bottom edge of the status row
-constexpr int BANNER_HEIGHT = 54;
-constexpr int BANNER_BOTTOM_GAP = 6;  // space below the pickup day strip
-constexpr int BANNER_TOP = SCREEN_HEIGHT - BANNER_BOTTOM_GAP - BANNER_HEIGHT;
-constexpr int BIN_ICON_BOX = 66;      // square each bin icon is centred in
-constexpr int BIN_ICONS_Y = (STATUS_BOTTOM + BANNER_TOP - BIN_ICON_BOX) / 2;
-constexpr int COLUMN_SPACING = 66;    // centre-to-centre distance of the bin columns
+// Layout, top to bottom: a speech bubble with the pickup day and the bins
+// going out, then the mascot "saying" it, with the weather beside it.
+constexpr int BUBBLE_X = 8, BUBBLE_Y = 10, BUBBLE_W = 184, BUBBLE_H = 92;
+constexpr int TAIL_X = 50;                  // where the tail meets the bubble
+constexpr int TAIL_HALF_W = 10;
+constexpr int TAIL_TIP_Y = BUBBLE_Y + BUBBLE_H + 16;
+constexpr int MASCOT_X = 10, MASCOT_Y = 110;  // 84px image
+constexpr int SIDE_RIGHT = 190;               // right edge of the weather column
 
-lv_obj_t* addLabel(lv_obj_t* parent, const char* text, const lv_font_t* font) {
+const char* const DAYS[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+
+lv_obj_t* addLabel(lv_obj_t* parent, const char* text, const lv_font_t* font,
+                   lv_color_t color = lv_color_black()) {
   lv_obj_t* label = lv_label_create(parent);
   lv_label_set_text(label, text);
   lv_obj_set_style_text_font(label, font, 0);
+  lv_obj_set_style_text_color(label, color, 0);
   return label;
 }
 
-// Icon followed by a reading, e.g. [thermometer] 21°C
-lv_obj_t* addReading(lv_obj_t* parent, const char* icon, const char* value) {
-  lv_obj_t* row = lv_obj_create(parent);
-  lv_obj_remove_style_all(row);
-  lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_column(row, 3, 0);
-  addLabel(row, icon, &icons_22);
-  addLabel(row, value, &font_bold_18);
-  return row;
+int widthOf(lv_obj_t* obj) {
+  lv_obj_update_layout(obj);
+  return lv_obj_get_width(obj);
 }
 
-// Draws a diagonal slash across a box, from top left to bottom right: a thick
-// white line to cut a gap through what's underneath, then a black one.
-// The points array must outlive the lines, so callers pass a static one.
-void addSlash(lv_obj_t* box, lv_point_precise_t* points, int white_width, int black_width) {
-  const struct {
-    lv_color_t color;
-    int width;
-  } strokes[] = {{lv_color_white(), white_width}, {lv_color_black(), black_width}};
-  for (const auto& stroke : strokes) {
-    lv_obj_t* line = lv_line_create(box);
-    lv_line_set_points(line, points, 2);
-    lv_obj_set_style_line_color(line, stroke.color, 0);
-    lv_obj_set_style_line_width(line, stroke.width, 0);
-    lv_obj_set_style_line_rounded(line, true, 0);
+void placeCentred(lv_obj_t* obj, int centre_x, int y) {
+  lv_obj_set_pos(obj, centre_x - widthOf(obj) / 2, y);
+}
+
+void addLine(lv_obj_t* parent, lv_point_precise_t* points, int width, lv_color_t color) {
+  lv_obj_t* line = lv_line_create(parent);
+  lv_line_set_points(line, points, 2);
+  lv_obj_set_style_line_width(line, width, 0);
+  lv_obj_set_style_line_color(line, color, 0);
+  lv_obj_set_style_line_rounded(line, true, 0);
+}
+
+// Diagonal slash across a box: a thick white line to cut a gap through what's
+// underneath, then a thin black one. Used for the offline Wi-Fi icon.
+void addSlash(lv_obj_t* parent, int x, int y, int w, int h) {
+  auto* points = new lv_point_precise_t[2]{{(lv_value_precise_t)x, (lv_value_precise_t)y},
+                                           {(lv_value_precise_t)(x + w), (lv_value_precise_t)(y + h)}};
+  addLine(parent, points, 6, lv_color_white());
+  addLine(parent, points, 2, lv_color_black());
+}
+
+const lv_image_dsc_t* mascotFace(const BinScreenData& data) {
+  if (!data.wifiConnected || data.isStale) return &mascot_emoji_worried;
+  if (data.batteryLow) return &mascot_emoji_sleepy;
+  if (data.isTonight) return &mascot_emoji_excited;
+  if (data.isToday) return &mascot_emoji_proud;
+  // Ordinary days alternate, so the face changes daily.
+  return data.dayNumber % 2 ? &mascot_emoji_wink : &mascot_emoji_happy;
+}
+
+void addBubble(lv_obj_t* screen, const BinScreenData& data) {
+  const bool loud = data.isTonight || data.isToday;
+  const lv_color_t ink = loud ? lv_color_white() : lv_color_black();
+
+  lv_obj_t* bubble = lv_obj_create(screen);
+  lv_obj_remove_style_all(bubble);
+  lv_obj_set_pos(bubble, BUBBLE_X, BUBBLE_Y);
+  lv_obj_set_size(bubble, BUBBLE_W, BUBBLE_H);
+  lv_obj_set_style_radius(bubble, 14, 0);
+  lv_obj_set_style_border_width(bubble, 3, 0);
+  lv_obj_set_style_border_color(bubble, lv_color_black(), 0);
+  lv_obj_set_style_border_opa(bubble, LV_OPA_COVER, 0);
+  lv_obj_set_style_bg_color(bubble, loud ? lv_color_black() : lv_color_white(), 0);
+  lv_obj_set_style_bg_opa(bubble, LV_OPA_COVER, 0);
+  lv_obj_set_scrollable(bubble, false);
+
+  // Tail pointing down at the mascot.
+  static lv_point_precise_t left[] = {{TAIL_X - TAIL_HALF_W, BUBBLE_Y + BUBBLE_H - 2}, {TAIL_X, TAIL_TIP_Y}};
+  static lv_point_precise_t right[] = {{TAIL_X + TAIL_HALF_W, BUBBLE_Y + BUBBLE_H - 2}, {TAIL_X, TAIL_TIP_Y}};
+  static lv_point_precise_t gap[] = {{TAIL_X - TAIL_HALF_W + 3, BUBBLE_Y + BUBBLE_H - 2},
+                                     {TAIL_X + TAIL_HALF_W - 3, BUBBLE_Y + BUBBLE_H - 2}};
+  if (loud) {
+    // Fill the tail so it matches the black bubble.
+    for (int k = -TAIL_HALF_W + 2; k <= TAIL_HALF_W - 2; k += 2) {
+      auto* fill = new lv_point_precise_t[2]{
+          {(lv_value_precise_t)(TAIL_X + k), (lv_value_precise_t)(BUBBLE_Y + BUBBLE_H - 2)},
+          {TAIL_X, (lv_value_precise_t)TAIL_TIP_Y}};
+      addLine(screen, fill, 3, lv_color_black());
+    }
+  } else {
+    addLine(screen, gap, 4, lv_color_white());  // open the bubble's border where the tail joins
+  }
+  addLine(screen, left, 3, lv_color_black());
+  addLine(screen, right, 3, lv_color_black());
+
+  const int centre = BUBBLE_W / 2;
+  if (loud) {
+    placeCentred(addLabel(bubble, data.isTonight ? "TONIGHT" : "TODAY", &font_bold_32, ink), centre, 8);
+  } else {
+    char day[12];
+    snprintf(day, sizeof(day), "%s %d", DAYS[dayOfWeek(data.pickup)], data.pickup.day);
+    placeCentred(addLabel(bubble, data.isStale ? "Last known" : "Bins out", &font_bold_14, ink), centre, 4);
+    placeCentred(addLabel(bubble, day, &font_bold_32, ink), centre, 20);
+  }
+
+  // The bins going out, in a centred row.
+  const char* icons[3];
+  int count = 0;
+  if (data.rubbish) icons[count++] = ICON_TRASH_CAN;
+  if (data.recycling) icons[count++] = ICON_RECYCLE;
+  if (data.foodScraps) icons[count++] = ICON_APPLE;
+  constexpr int ICON_STEP = 42;
+  for (int i = 0; i < count; ++i) {
+    lv_obj_t* icon = addLabel(bubble, icons[i], &icons_30, ink);
+    placeCentred(icon, centre + (2 * i - (count - 1)) * ICON_STEP / 2, 49);
   }
 }
 
-// Wi-Fi icon, struck through with a slash when offline. Font Awesome Free
-// has no "wifi off" icon.
-void addWifiStatus(lv_obj_t* parent, bool connected) {
-  lv_obj_t* box = lv_obj_create(parent);
-  lv_obj_remove_style_all(box);
-  lv_obj_set_size(box, 28, 24);
-  lv_obj_t* icon = addLabel(box, ICON_WIFI, &icons_22);
-  lv_obj_center(icon);
-  if (connected) return;
-
-  static lv_point_precise_t slash[] = {{3, 2}, {25, 22}};
-  addSlash(box, slash, 7, 3);
-}
-
-// Battery outline whose fill is proportional to the charge. Drawn rather than
-// taken from Font Awesome, which only has five fixed levels.
-void addBattery(lv_obj_t* parent, bool known, int percent) {
-  constexpr int BODY_W = 22;
-  constexpr int BODY_H = 12;
-  constexpr int BORDER = 2;
-  constexpr int GAP = 1;  // white gap between the outline and the fill
-
-  lv_obj_t* box = lv_obj_create(parent);
-  lv_obj_remove_style_all(box);
-  lv_obj_set_size(box, BODY_W + 3, BODY_H);
-
-  lv_obj_t* body = lv_obj_create(box);
-  lv_obj_remove_style_all(body);
-  lv_obj_set_size(body, BODY_W, BODY_H);
-  lv_obj_set_style_border_color(body, lv_color_black(), 0);
-  lv_obj_set_style_border_width(body, BORDER, 0);
-  lv_obj_set_style_border_opa(body, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(body, 2, 0);
-
-  lv_obj_t* nub = lv_obj_create(box);
-  lv_obj_remove_style_all(nub);
-  lv_obj_set_size(nub, 3, 6);
-  lv_obj_set_pos(nub, BODY_W, (BODY_H - 6) / 2);
-  lv_obj_set_style_bg_color(nub, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(nub, LV_OPA_COVER, 0);
-
-  if (!known) return;
-  constexpr int INNER_W = BODY_W - 2 * (BORDER + GAP);
-  const int fill_w = (std::clamp(percent, 0, 100) * INNER_W + 50) / 100;
-  if (fill_w == 0) return;
-  lv_obj_t* fill = lv_obj_create(box);
-  lv_obj_remove_style_all(fill);
-  lv_obj_set_size(fill, fill_w, BODY_H - 2 * (BORDER + GAP));
-  lv_obj_set_pos(fill, BORDER + GAP, BORDER + GAP);
-  lv_obj_set_style_bg_color(fill, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
-}
-
-// Top row, centred: Wi-Fi status, temperature, humidity, battery.
-void addStatusBar(lv_obj_t* screen, const BinScreenData& data) {
+// Temperature over humidity, right-aligned beside the mascot, with status
+// icons below only when something needs attention.
+void addSide(lv_obj_t* screen, const BinScreenData& data) {
   char temperature[12];
   char humidity[8];
   if (data.hasClimate) {
-    // Clamp so both readings stay two digits wide.
-    snprintf(temperature, sizeof(temperature), "%d\xC2\xB0" "C",
-             std::clamp(data.temperatureC, -9, 99));
+    snprintf(temperature, sizeof(temperature), "%d\xC2\xB0" "C", std::clamp(data.temperatureC, -9, 99));
     snprintf(humidity, sizeof(humidity), "%d%%", std::clamp(data.humidityPct, 0, 99));
   } else {
     snprintf(temperature, sizeof(temperature), "--\xC2\xB0" "C");
     snprintf(humidity, sizeof(humidity), "--%%");
   }
 
-  lv_obj_t* bar = lv_obj_create(screen);
-  lv_obj_remove_style_all(bar);
-  lv_obj_set_size(bar, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_column(bar, 8, 0);
-  addWifiStatus(bar, data.wifiConnected);
-  addReading(bar, ICON_THERMOMETER, temperature);
-  addReading(bar, ICON_DROPLET, humidity);
-  addBattery(bar, data.hasBattery, data.batteryPct);
-  lv_obj_align(bar, LV_ALIGN_TOP_MID, 0, 5);
-}
+  const bool issues = !data.wifiConnected || data.batteryLow || data.isStale;
+  const int top = issues ? 124 : 134;  // centred beside the mascot, or raised to fit the icons
 
-void addPickupDay(lv_obj_t* screen, const BinScreenData& data) {
-  static const char* const DAYS[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+  lv_obj_t* t = addLabel(screen, temperature, &font_bold_18);
+  lv_obj_set_pos(t, SIDE_RIGHT - widthOf(t), top);
+  lv_obj_t* h = addLabel(screen, humidity, &font_bold_18);
+  const int hx = SIDE_RIGHT - widthOf(h);
+  lv_obj_set_pos(h, hx, top + 26);
+  lv_obj_t* drop = addLabel(screen, ICON_DROPLET, &icons_18);
+  lv_obj_set_pos(drop, hx - widthOf(drop) - 3, top + 26);
 
-  lv_obj_t* banner = lv_obj_create(screen);
-  lv_obj_remove_style_all(banner);
-  lv_obj_set_size(banner, LV_PCT(100), BANNER_HEIGHT);
-  lv_obj_align(banner, LV_ALIGN_BOTTOM_MID, 0, -BANNER_BOTTOM_GAP);
-
-  lv_obj_t* label;
-  if (data.isStale) {
-    // Out of date: the last known day next to a "history" icon, in the
-    // smaller font so both fit
-    char text[12];
-    snprintf(text, sizeof(text), "%s %d", DAYS[dayOfWeek(data.pickup)], data.pickup.day);
-    lv_obj_t* row = lv_obj_create(banner);
-    lv_obj_remove_style_all(row);
-    lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(row, 10, 0);
-    addLabel(row, ICON_STALE, &icons_30);
-    addLabel(row, text, &font_bold_32);
-    label = row;
-  } else if (data.isToday || data.isTonight) {
-    // Evening before (put the bins out) or the pickup day itself: white text
-    // on a solid black strip
-    lv_obj_set_style_bg_color(banner, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(banner, LV_OPA_COVER, 0);
-    label = addLabel(banner, data.isToday ? "TODAY" : "TONIGHT", &font_bold_32);
-    lv_obj_set_style_text_color(label, lv_color_white(), 0);
-  } else {
-    char text[12];
-    snprintf(text, sizeof(text), "%s %d", DAYS[dayOfWeek(data.pickup)], data.pickup.day);
-    label = addLabel(banner, text, &font_bold_40);
+  if (!issues) return;
+  int x = SIDE_RIGHT;
+  const int y = top + 52;
+  // Right to left. Returns the icon's width; x moves to its left edge.
+  auto addIcon = [&](const char* glyph) {
+    lv_obj_t* icon = addLabel(screen, glyph, &icons_18);
+    const int w = widthOf(icon);
+    x -= w;
+    lv_obj_set_pos(icon, x, y);
+    return w;
+  };
+  if (data.isStale) x -= addIcon(ICON_STALE) ? 8 : 0;
+  if (data.batteryLow) x -= addIcon(ICON_BATTERY_LOW) ? 8 : 0;
+  if (!data.wifiConnected) {
+    const int w = addIcon(ICON_WIFI);
+    addSlash(screen, x, y, w, 18);
   }
-  lv_obj_center(label);
-}
-
-// One bin icon, struck through with a slash if that bin isn't collected on
-// the pickup day.
-void addBin(lv_obj_t* screen, int column, const char* icon, bool collected) {
-  lv_obj_t* box = lv_obj_create(screen);
-  lv_obj_remove_style_all(box);
-  lv_obj_set_size(box, BIN_ICON_BOX, BIN_ICON_BOX);
-  lv_obj_align(box, LV_ALIGN_TOP_MID, (column - 1) * COLUMN_SPACING, BIN_ICONS_Y);
-
-  lv_obj_t* glyph = addLabel(box, icon, &icons_60);
-  lv_obj_center(glyph);
-  if (collected) return;
-
-  static lv_point_precise_t slash[] = {{4, 4}, {BIN_ICON_BOX - 4, BIN_ICON_BOX - 4}};
-  addSlash(box, slash, 12, 5);
 }
 
 }  // namespace
@@ -198,10 +173,12 @@ lv_obj_t* createBinScreen(const BinScreenData& data) {
   lv_obj_set_style_text_color(screen, lv_color_black(), 0);
   lv_obj_set_scrollable(screen, false);
 
-  addStatusBar(screen, data);
-  addBin(screen, 0, ICON_TRASH_CAN, data.rubbish);
-  addBin(screen, 1, ICON_RECYCLE, data.recycling);
-  addBin(screen, 2, ICON_APPLE, data.foodScraps);
-  addPickupDay(screen, data);
+  addBubble(screen, data);
+
+  lv_obj_t* mascot = lv_image_create(screen);
+  lv_image_set_src(mascot, mascotFace(data));
+  lv_obj_set_pos(mascot, MASCOT_X, MASCOT_Y);
+
+  addSide(screen, data);
   return screen;
 }

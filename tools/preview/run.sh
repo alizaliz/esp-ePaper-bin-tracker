@@ -10,7 +10,7 @@ OUT="tools/preview/out"
 [ -d "$LVGL" ] || { echo "LVGL not found; run 'pio run' first" >&2; exit 1; }
 mkdir -p "$BUILD/lvgl" "$OUT"
 
-CFLAGS=(-O2 -DLV_CONF_INCLUDE_SIMPLE -Itools/preview -I"$LVGL" -Isrc -Icomponents/fonts -w)
+CFLAGS=(-O2 -DLV_CONF_INCLUDE_SIMPLE -Itools/preview -I"$LVGL" -Isrc -Icomponents/fonts -Icomponents/mascot -w)
 
 # LVGL is compiled once and reused.
 if [ ! -f "$BUILD/liblvgl.a" ]; then
@@ -21,9 +21,10 @@ if [ ! -f "$BUILD/liblvgl.a" ]; then
   ar rcs "$BUILD/liblvgl.a" "$BUILD"/lvgl/*.o
 fi
 
-for f in components/fonts/*.c; do
-  cc "${CFLAGS[@]}" -c "$f" -o "$BUILD/$(basename "$f" .c).o"
+rm -f "$BUILD"/art_*.o
+for f in components/fonts/*.c components/mascot/*.c; do
+  cc "${CFLAGS[@]}" -c "$f" -o "$BUILD/art_$(basename "$f" .c).o"
 done
 c++ -std=c++17 "${CFLAGS[@]}" tools/preview/preview.cpp src/ui/*.cpp \
-  "$BUILD"/font_*.o "$BUILD"/icons_*.o "$BUILD/liblvgl.a" -lz -o "$BUILD/preview"
+  "$BUILD"/art_*.o "$BUILD/liblvgl.a" -lz -o "$BUILD/preview"
 "$BUILD/preview" "$OUT"

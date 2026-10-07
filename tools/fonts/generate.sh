@@ -24,12 +24,7 @@ conv() {
   npx --yes lv_font_conv@1.5.3 --no-compress --format lvgl --bpp 4 --lv-include lvgl.h "$@"
 }
 
-# Pickup day ("THU 8") and "TODAY"
-conv --font "$MONTSERRAT" --size 40 --symbols "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 " \
-  --lv-font-name font_bold_40 -o "$OUT/font_bold_40.c"
-
-# "TODAY" and "TONIGHT" banners (TONIGHT is too wide for the 40px size),
-# and the pickup day next to the stale data icon
+# Speech bubble day ("THU 8"), "TODAY" and "TONIGHT"
 conv --font "$MONTSERRAT" --size 32 --symbols "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 " \
   --lv-font-name font_bold_32 -o "$OUT/font_bold_32.c"
 
@@ -37,16 +32,16 @@ conv --font "$MONTSERRAT" --size 32 --symbols "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456
 conv --font "$MONTSERRAT" --size 18 --symbols "0123456789-°C% " \
   --lv-font-name font_bold_18 -o "$OUT/font_bold_18.c"
 
+# Small speech bubble text ("Bins out", "Last known")
+conv --font "$MONTSERRAT" --size 14 --symbols "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 !'.,:" \
+  --lv-font-name font_bold_14 -o "$OUT/font_bold_14.c"
+
 # Bin icons: trash-can, recycle, apple-whole
-conv --font "$FA" --size 60 --range 0xF2ED,0xF1B8,0xF5D1 \
-  --lv-font-name icons_60 -o "$OUT/icons_60.c"
-
-# Top row icons: wifi, temperature-half, droplet
-conv --font "$FA" --size 22 --range 0xF1EB,0xF2C9,0xF043 \
-  --lv-font-name icons_22 -o "$OUT/icons_22.c"
-
-# Stale data icon: clock-rotate-left
-conv --font "$FA" --size 30 --range 0xF1DA \
+conv --font "$FA" --size 30 --range 0xF2ED,0xF1B8,0xF5D1 \
   --lv-font-name icons_30 -o "$OUT/icons_30.c"
+
+# Status icons: wifi, battery-quarter, clock-rotate-left (out of date), droplet
+conv --font "$FA" --size 18 --range 0xF1EB,0xF243,0xF1DA,0xF043 \
+  --lv-font-name icons_18 -o "$OUT/icons_18.c"
 
 echo "Fonts written to $OUT/"
