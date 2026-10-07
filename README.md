@@ -202,25 +202,24 @@ A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync und
 | `src/auckland_council_client.*`, `src/council_parser.*` | Fetch and parse the collection day page |
 | `src/weather_client.*` | Daily average weather from Open-Meteo |
 | `src/network.*`, `src/https_client.*` | Wi-Fi, NTP and streaming HTTPS |
-| `src/storage.*` | Values saved in flash (NVS): the last schedule and the settings |
+| `src/settings.*`, `src/config_service.*` | Settings, and the settings page's USB serial channel |
+| `src/storage.*`, `src/stats.*` | Values saved in flash, and the daily battery log |
 | `src/ota_updater.*` | Firmware updates from GitHub releases, with rollback |
-| `src/settings.*` | Settings: `config.h` defaults overridden by values saved from the page |
-| `src/config_service.*` | Answers the settings page over USB serial |
-| `docs/config/index.html` | The settings page (Web Serial), published with GitHub Pages |
-| `tests/` | Council parser tests, fixture and the live page check |
-| `.github/workflows/` | CI and releases |
-| `src/display_manager.*`, `src/epd_ssd1681.*` | LVGL setup and the e-paper panel driver |
 | `src/ui/bin_screen.*` | Screen layout: plain LVGL, previewable on a computer |
 | `src/ui/mono_convert.*` | Greyscale to black and white, and the 180° flip |
+| `src/display_manager.*`, `src/epd_ssd1681.*` | LVGL setup and the e-paper panel driver |
 | `src/shtc3.*`, `src/battery.*` | Onboard sensor and battery reading |
-| `src/stats.*` | Daily battery and activity log |
 | `src/board_power.*`, `src/board_pins.h` | I2C, the I/O expander (panel power, battery hold, LED) and pins |
-| `components/fonts/` | Generated LVGL fonts: Montserrat Bold and Font Awesome icons |
+| `src/config.example.h` | Default settings built into the firmware |
+| `components/fonts/` | Generated fonts: Montserrat Bold and Font Awesome icons |
 | `components/mascot/` | Generated mascot images |
-| `tools/mascot/make_emoji.py` | Generates the mascot images |
+| `docs/config/` | The settings page (Web Serial), published with GitHub Pages |
+| `docs/images/` | README images |
+| `tests/` | Council parser tests, fixture and the live page check |
+| `tools/fonts/`, `tools/mascot/` | Generators for the fonts and the mascot |
 | `tools/preview/` | Renders the screen to PNGs on a computer |
-| `tools/fonts/generate.sh` | Regenerates the fonts |
-| `tools/docs/make_images.py` | Regenerates the README images in `docs/images/` |
+| `tools/docs/` | Regenerates the README images |
+| `.github/workflows/` | CI and releases |
 | `sdkconfig.defaults`, `partitions.csv` | ESP-IDF settings and the flash layout (two 4MB app slots for updates) |
 
 </details>
@@ -253,7 +252,6 @@ The preview uses the same layout code, fonts, mascot images and black and white 
 <summary>Fonts, icons and the mascot</summary>
 
 - Fonts are compiled into the firmware as bitmaps and contain only the characters the screen uses. To add characters, icons or sizes, edit `tools/fonts/generate.sh` and run it. It needs Node.js. Then add any new font to `components/fonts/CMakeLists.txt` and `fonts.h`.
-- PNG images can be embedded from `src/assets/`. Add the file to `board_build.embed_files` in `platformio.ini` and declare it in `src/assets.h`. Keep them icon-sized: they're decoded to full colour in RAM.
 - Binny's faces are drawn as SVG in `tools/mascot/make_emoji.py`, which rasterises them, dithers them to black and white, and writes 1-bit LVGL images to `components/mascot/` (about 1KB each). Edit the drawings there and run `python3 tools/mascot/make_emoji.py`; it needs macOS (Quick Look and `sips` do the rasterising). Pre-dithering keeps the shading the same whatever the dithering setting.
 
 </details>

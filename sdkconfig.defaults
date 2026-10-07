@@ -8,14 +8,11 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # LVGL: render in 8-bit greyscale; display_manager converts to 1-bit for the panel.
 CONFIG_LV_COLOR_DEPTH_8=y
-# Use the system heap so decoded PNGs aren't limited by LVGL's own memory pool.
+# Use the system heap rather than LVGL's own fixed-size memory pool.
 CONFIG_LV_USE_CLIB_MALLOC=y
-# PNG decoder for images embedded from src/assets/.
-CONFIG_LV_USE_LODEPNG=y
-# Built-in fonts (compiled in as bitmap arrays). Enable more sizes as needed.
+# LVGL's default font; the screen itself uses the generated fonts in
+# components/fonts.
 CONFIG_LV_FONT_MONTSERRAT_14=y
-CONFIG_LV_FONT_MONTSERRAT_16=y
-CONFIG_LV_FONT_MONTSERRAT_20=y
 
 # LVGL rendering and PNG decoding run in app_main and need more than the
 # default ~4KB main task stack.
