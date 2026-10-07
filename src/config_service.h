@@ -14,6 +14,8 @@
 //   stats            -> {"ok":true,"days":[...]}, the daily battery log (see stats.h)
 //   update           -> replies, then the main task checks for and installs a
 //                       firmware update (see takeUpdateRequest)
+#include "cJSON.h"
+
 namespace config_service {
 
 // Starts listening if a computer is connected over USB. Does nothing on
@@ -23,6 +25,11 @@ void start();
 // Stops routing console output through the USB driver, so log output can't
 // block once the computer is gone. Call before deep sleep.
 void stop();
+
+// Sends an unprompted message to the page, e.g. update progress, if it's
+// connected. Events carry an "event" field so the page can tell them from
+// replies. Takes ownership of json.
+void sendEvent(cJSON* json);
 
 // True once after the page has asked for an update check. The main task
 // polls this while it stays awake on USB.

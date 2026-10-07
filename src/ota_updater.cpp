@@ -130,7 +130,10 @@ void markHealthy() {
   }
 }
 
-esp_err_t checkAndInstall(bool force) {
+esp_err_t checkAndInstall(bool force, const Progress& progress) {
+  auto report = [&](const char* state, const char* version, int percent = 0) {
+    if (progress) progress(state, version, percent);
+  };
   const Version current = parseVersion(currentVersion());
   if (!current.valid() && !force) {
     ESP_LOGI(TAG, "development build %s; skipping the automatic update check", currentVersion());
@@ -138,15 +141,20 @@ esp_err_t checkAndInstall(bool force) {
   }
 
   Release latest;
-  ESP_RETURN_ON_ERROR(fetchLatestRelease(latest), TAG, "");
+  if (fetchLatestRelease(latest) != ESP_OK) {
+    report("failed", "couldn't reach GitHub");
+    return ESP_FAIL;
+  }
   const Version available = parseVersion(latest.tag.c_str());
   ESP_LOGI(TAG, "running %s, latest release %s", currentVersion(), latest.tag.c_str());
 
   if (!available.valid() || (current.valid() && !(available > current))) {
+    report("uptodate", currentVersion());
     return ESP_ERR_NOT_FOUND;
   }
   if (latest.tag == rolledBackVersion()) {
     ESP_LOGW(TAG, "%s was rolled back after failing; not installing it again", latest.tag.c_str());
+    report("uptodate", currentVersion());
     return ESP_ERR_NOT_FOUND;
   }
 
@@ -163,8 +171,40 @@ esp_err_t checkAndInstall(bool force) {
 
   esp_https_ota_config_t config = {};
   config.http_config = &http;
-  ESP_RETURN_ON_ERROR(esp_https_ota(&config), TAG, "download or install failed");
-  ESP_LOGI(TAG, "%s installed; it starts after a restart", latest.tag.c_str());
+
+  // Download in steps, so progress can be reported.
+  esp_https_ota_handle_t ota = nullptr;
+  esp_err_t err = esp_https_ota_begin(&config, &ota);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "download failed to start: %s", esp_err_to_name(err));
+    report("failed", "download failed");
+    return err;
+  }
+  const char* version = latest.tag.c_str();
+  int last_percent = -1;
+  report("downloading", version, 0);
+  while ((err = esp_https_ota_perform(ota)) == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
+    const int size = esp_https_ota_get_image_size(ota);
+    const int percent = size > 0 ? (int)(100LL * esp_https_ota_get_image_len_read(ota) / size) : 0;
+    if (percent >= last_percent + 5) {  // every 5% is plenty
+      last_percent = percent;
+      report("downloading", version, percent);
+    }
+  }
+  if (err != ESP_OK || !esp_https_ota_is_complete_data_received(ota)) {
+    ESP_LOGE(TAG, "download failed: %s", esp_err_to_name(err));
+    esp_https_ota_abort(ota);
+    report("failed", "download failed");
+    return err != ESP_OK ? err : ESP_FAIL;
+  }
+  err = esp_https_ota_finish(ota);  // checks the image and switches to it
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "install failed: %s", esp_err_to_name(err));
+    report("failed", "the downloaded firmware didn't verify");
+    return err;
+  }
+  ESP_LOGI(TAG, "%s installed; it starts after a restart", version);
+  report("installed", version, 100);
   return ESP_OK;
 }
 

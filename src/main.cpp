@@ -282,14 +282,25 @@ static void stay_awake_while_usb_connected(void) {
   bool armed = !pwr_button_pressed();
   while (usb_serial_jtag_is_connected()) {
     if (config_service::takeUpdateRequest()) {
-      // Asked for by the config page. Development builds can be updated this
-      // way too.
+      // Asked for by the config page, which shows each step. Development
+      // builds can be updated this way too.
+      auto event = [](const char* state, const char* version, int percent) {
+        cJSON* json = cJSON_CreateObject();
+        cJSON_AddStringToObject(json, "event", "update");
+        cJSON_AddStringToObject(json, "state", state);
+        if (version) cJSON_AddStringToObject(json, "version", version);
+        if (strcmp(state, "downloading") == 0) cJSON_AddNumberToObject(json, "percent", percent);
+        config_service::sendEvent(json);
+      };
       printf("Checking for a firmware update...\n");
+      event("checking", nullptr, 0);
       if (network::connect(WIFI_TIMEOUT_MS) == ESP_OK) {
-        const esp_err_t err = ota::checkAndInstall(true);
+        const esp_err_t err = ota::checkAndInstall(true, event);
         network::disconnect();
         if (err == ESP_OK) {
           printf("Update installed: restarting\n");
+          event("restarting", nullptr, 0);
+          vTaskDelay(pdMS_TO_TICKS(300));  // let the message reach the page
           esp_restart();
         }
         printf(err == ESP_ERR_NOT_FOUND ? "Firmware is up to date (%s)\n"
@@ -297,6 +308,7 @@ static void stay_awake_while_usb_connected(void) {
                ota::currentVersion());
       } else {
         printf("Firmware update check failed: no Wi-Fi\n");
+        event("failed", "no Wi-Fi connection", 0);
       }
     }
     if (!pwr_button_pressed()) {

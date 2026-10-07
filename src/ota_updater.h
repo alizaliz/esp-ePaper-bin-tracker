@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "esp_err.h"
 
 // Over-the-air firmware updates from the project's GitHub releases.
@@ -21,6 +23,11 @@ bool isPendingVerify();
 // Confirms newly installed firmware, cancelling the rollback.
 void markHealthy();
 
+// Progress during checkAndInstall, for the settings page: state is one of
+// "uptodate", "downloading" (with percent 0-100), "installed" or "failed"
+// (version holds the reason). version is the release found, if any.
+using Progress = std::function<void(const char* state, const char* version, int percent)>;
+
 // Checks the latest release and installs it if it's newer than the running
 // firmware. Needs a network connection. Returns ESP_OK if an update was
 // installed (the caller should restart), ESP_ERR_NOT_FOUND if there's nothing
@@ -28,6 +35,6 @@ void markHealthy();
 //
 // Development builds (not a vX.Y.Z version) are only updated when `force` is
 // true, so a build flashed from a computer isn't replaced overnight.
-esp_err_t checkAndInstall(bool force);
+esp_err_t checkAndInstall(bool force, const Progress& progress = nullptr);
 
 }  // namespace ota

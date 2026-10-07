@@ -66,6 +66,14 @@
     white-space: pre-wrap; word-break: break-all;
   }
   #unsupported { display: none; }
+  .update-status {
+    margin-top: 12px; padding: 10px 12px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--input);
+  }
+  .update-status.ok { border-color: var(--ok); color: var(--ok); }
+  .update-status.error { border-color: var(--error); color: var(--error); }
+  .update-bar { margin-top: 8px; height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+  .update-bar div { height: 100%; width: 0; background: var(--accent); transition: width 0.3s; }
   #statsTable th, #statsTable td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: right; }
   #statsTable td:first-child, #statsTable th:first-child { text-align: left; }
 
@@ -126,6 +134,10 @@
       <div class="status">
         <span id="firmwareVersion" style="flex:1">Version: unknown</span>
         <button type="button" id="checkUpdate">Check for updates now</button>
+      </div>
+      <div id="updateStatus" class="update-status" role="status" aria-live="polite" hidden>
+        <span id="updateText"></span>
+        <div class="update-bar" id="updateBar" hidden><div id="updateFill"></div></div>
       </div>
       <label class="check"><input type="checkbox" id="autoUpdate"> Install updates automatically, overnight</label>
       <div class="hint">Updates come from this project's GitHub releases. If new firmware fails, the board goes back to the previous version.</div>
@@ -306,6 +318,10 @@ function handleLine(line) {
   if (at > 0) appendLog(line.slice(0, at));
   let reply;
   try { reply = JSON.parse(line.slice(at + MARKER.length)); } catch { return; }
+  if (reply.event) {
+    handleEvent(reply);
+    return;
+  }
   if (pending) {
     clearTimeout(pending.timer);
     const { resolve } = pending;
@@ -374,6 +390,7 @@ async function openPort(p) {
     return;
   }
   $("firmwareVersion").textContent = `Version: ${hello.version || "unknown"}`;
+  checkUpdateResult(hello.version);
   await loadSettings();
 }
 
@@ -386,6 +403,10 @@ async function onPortClosed(p) {
   setFormDisabled(true);
   $("refreshStats").disabled = true;
   setStatus(wantConnection ? "Reconnecting..." : "Disconnected.", false);
+  if (updating && !installedVersion) {
+    setUpdateStatus("The bin tracker disconnected during the update. Reconnect to check its version.", "error");
+    finishUpdate();
+  }
 }
 
 async function loadSettings() {
@@ -556,17 +577,138 @@ $("form").addEventListener("submit", async (e) => {
   const reply = await request({ cmd: "set", settings });
   if (!reply) return showMessage("No answer from the bin tracker. Check it's still connected.", "error");
   if (!reply.ok) return showMessage(reply.error, "error");
-  showMessage("Saved. The bin tracker is restarting to apply the new settings.", "ok");
+  showMessage("Saved. The bin tracker is restarting to apply the new settings...", "ok");
   setFormDisabled(true);
   await request({ cmd: "restart" }, 2000);
+  showMessage(await waitForRestart()
+    ? "Saved. The bin tracker has restarted with the new settings."
+    : "Saved, but the bin tracker hasn't answered since restarting. Unplug it, plug it back in and reconnect.",
+    port ? "ok" : "error");
 });
+
+// Firmware update progress ----------------------------------------------
+// The board sends {"event":"update","state":...} messages while it checks,
+// downloads and installs; after it restarts, the page reconnects and checks
+// the version it's now running.
+
+let updating = false;        // an update check started from this page is under way
+let installedVersion = null; // version the board said it installed, before restarting
+let reconnectTimer = null;
+let noEventTimer = null;     // firmware before v1.3.1 doesn't send update events
+
+function setUpdateStatus(text, kind = "", percent = null) {
+  $("updateStatus").hidden = !text;
+  $("updateStatus").className = "update-status" + (kind ? " " + kind : "");
+  $("updateText").textContent = text;
+  $("updateBar").hidden = percent === null;
+  if (percent !== null) $("updateFill").style.width = `${percent}%`;
+}
+
+function finishUpdate() {
+  updating = false;
+  installedVersion = null;
+  clearTimeout(reconnectTimer);
+  clearTimeout(noEventTimer);
+  $("checkUpdate").disabled = false;
+}
+
+function handleEvent(event) {
+  if (event.event !== "update") return;
+  clearTimeout(noEventTimer);
+  switch (event.state) {
+    case "checking":
+      setUpdateStatus("Checking for updates...");
+      break;
+    case "uptodate":
+      setUpdateStatus(`You're on the latest version (${event.version}).`, "ok");
+      finishUpdate();
+      break;
+    case "downloading":
+      setUpdateStatus(`Downloading ${event.version}... ${event.percent}%`, "", event.percent);
+      break;
+    case "installed":
+      installedVersion = event.version;
+      setUpdateStatus(`Installed ${event.version}. Restarting...`, "", 100);
+      break;
+    case "restarting":
+      setUpdateStatus(`Restarting into ${installedVersion || "the new version"}. Reconnecting automatically...`);
+      waitForRestart().then((answered) => {
+        if (!answered && updating && port) {
+          setUpdateStatus("The bin tracker hasn't answered since restarting. Unplug it and plug it back in, "
+            + "then click Connect.", "error");
+          finishUpdate();
+        }
+      });
+      // If the board doesn't come back, say what to do.
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => {
+        if (!port) {
+          setUpdateStatus("The bin tracker hasn't reconnected. Unplug it and plug it back in, "
+            + "then click Connect.", "error");
+          finishUpdate();
+        }
+      }, 60000);
+      break;
+    case "failed":
+      setUpdateStatus(`The update didn't work: ${event.version || "unknown error"}. Try again later.`, "error");
+      finishUpdate();
+      break;
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// After the board restarts (new settings, reset, or an update), wait for the
+// new firmware to answer. The USB connection usually stays open through a
+// restart, so ask on the same port; if it does drop, openPort() takes over.
+// Returns true once the board has answered.
+async function waitForRestart() {
+  const p = port;
+  await sleep(1500);  // the old firmware restarts a moment after replying
+  for (let i = 0; i < 40 && port === p; i++) {
+    const hello = await request({ cmd: "hello" }, 1500);
+    if (hello && hello.device) {
+      $("firmwareVersion").textContent = `Version: ${hello.version || "unknown"}`;
+      checkUpdateResult(hello.version);
+      await loadSettings();
+      return true;
+    }
+  }
+  return false;
+}
+
+// Called with the board's version each time the page connects.
+function checkUpdateResult(version) {
+  if (!updating || !installedVersion) return;
+  if (version === installedVersion) {
+    setUpdateStatus(`Updated to ${version}.`, "ok");
+  } else {
+    setUpdateStatus(`The new version didn't start properly, so the bin tracker went back to ${version}. `
+      + "It won't try that version again.", "error");
+  }
+  finishUpdate();
+}
 
 $("checkUpdate").addEventListener("click", async () => {
   showMessage("");
+  updating = true;
+  installedVersion = null;
+  $("checkUpdate").disabled = true;
+  setUpdateStatus("Asking the bin tracker to check for updates...");
   const reply = await request({ cmd: "update" });
-  if (!reply || !reply.ok) return showMessage("No answer from the bin tracker.", "error");
-  showMessage("Checking for updates. If there's a newer version, the bin tracker downloads it (about a minute) "
-    + "and restarts, and this page reconnects. Open the device log below to follow along.", "ok");
+  if (!reply || !reply.ok) {
+    setUpdateStatus("No answer from the bin tracker. Check it's connected.", "error");
+    finishUpdate();
+    return;
+  }
+  // Older firmware accepts the request but doesn't report progress.
+  noEventTimer = setTimeout(() => {
+    if (!updating) return;
+    setUpdateStatus("This firmware doesn't report update progress. If a newer version was found, the bin "
+      + "tracker installs it and restarts by itself; check the version above in a minute.");
+    finishUpdate();
+    waitForRestart();
+  }, 30000);
 });
 
 $("reset").addEventListener("click", async () => {
@@ -574,9 +716,10 @@ $("reset").addEventListener("click", async () => {
   showMessage("");
   const reply = await request({ cmd: "reset" });
   if (!reply || !reply.ok) return showMessage((reply && reply.error) || "No answer from the bin tracker.", "error");
-  showMessage("Settings reset to the firmware defaults. Restarting.", "ok");
+  showMessage("Settings reset to the firmware defaults. Restarting...", "ok");
   setFormDisabled(true);
   await request({ cmd: "restart" }, 2000);
+  if (await waitForRestart()) showMessage("Settings reset to the firmware defaults.", "ok");
 });
 
 $("locate").addEventListener("click", () => {

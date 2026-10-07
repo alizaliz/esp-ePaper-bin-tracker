@@ -144,7 +144,7 @@ Once a night, after fetching the schedule, the board checks this project's [late
 
 - **Safe to fail:** the update goes into a second firmware slot. New firmware has to fetch the schedule successfully before it's kept; if it crashes or can't, the board goes back to the previous version on its next restart, and won't try that version again.
 - **Skipped** when the battery is below 30%, or for firmware built on a computer (a development build) rather than a release.
-- **Settings page:** shows the running version, has a **Check for updates now** button, and can turn automatic updates off.
+- **Settings page:** shows the running version, has a **Check for updates now** button, and can turn automatic updates off. While an update runs, it shows each step: checking, downloading with a progress bar, installing and restarting, then confirms the new version once the board answers again (or says if it rolled back). Firmware before v1.3.1 doesn't report progress, so the page just says to check the version afterwards.
 - Saved settings and the schedule are kept across updates.
 
 ### LED and buttons

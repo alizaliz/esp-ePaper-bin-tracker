@@ -136,6 +136,14 @@ void start() {
   ESP_LOGI(TAG, "config page can connect over USB");
 }
 
+void sendEvent(cJSON* json) {
+  if (running) {
+    reply(json);
+  } else {
+    cJSON_Delete(json);
+  }
+}
+
 bool takeUpdateRequest() {
   if (!update_requested) return false;
   update_requested = false;
