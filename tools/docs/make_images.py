@@ -6,7 +6,8 @@ Run tools/preview/run.sh first, then this script, from the repo root:
 
 Copies a few screen previews and generates diagram.svg, which labels the
 screen around the real renders: the main screen, the bottom of the screen
-when something's wrong, the mascot's moods, and the board's controls.
+when something's wrong, the mascot's moods, the weather icons, and the board's
+controls.
 Callout positions match src/ui/bin_screen.cpp; update them if the layout
 changes.
 """
@@ -74,10 +75,10 @@ def build_diagram():
                  f'href="data:image/png;base64,{png("upcoming")}"/>')
     parts.append(right_callout(at(150, 46), "Next pickup day",
                                "TONIGHT, then TODAY, in a black bubble"))
-    parts.append(left_callout(at(68, 74), "Bins going out", "only the ones collected"))
-    parts.append(left_callout(at(12, 152), "Binny", "face changes with the day"))
-    parts.append(right_callout(at(190, 143), "Temperature", "today's average"))
-    parts.append(right_callout(at(190, 169), "Humidity", "today's average"))
+    parts.append(left_callout(at(82, 76), "Bins going out", "only the ones collected"))
+    parts.append(left_callout(at(10, 154), "Binny", "face changes with the day"))
+    parts.append(right_callout(at(188, 140), "Midday forecast", "today, or tomorrow after 2pm"))
+    parts.append(right_callout(at(138, 184), "Temperature", "at midday"))
 
     # When something's wrong: the bottom of the screen with every problem.
     top = SCREEN_Y + 400 + 100
@@ -88,8 +89,10 @@ def build_diagram():
     parts.append(cropped("offline", SCREEN_X, top, strip_top, strip_h))
     shift = top - strip_top * SCALE  # maps screen rows in the strip to diagram y
     parts.append(left_callout(at(12, 152, shift), "Worried Binny", "offline or out of date"))
-    parts.append(right_callout(at(186, 185, shift), "Status icons",
+    parts.append(right_callout(at(113, 180, shift), "Status icons",
                                "offline, low battery, out of date"))
+    parts.append(right_callout(at(172, 132, shift), "Indoor temperature",
+                               "when there's no forecast"))
     parts.append(f'<text x="{SCREEN_X + 200}" y="{top + strip_h * SCALE + 46}" text-anchor="middle" class="s">'
                  f'Icons appear only when needed. The bubble says "Last known" when the dates may be old.</text>')
 
@@ -108,9 +111,23 @@ def build_diagram():
                      f'<image width="400" height="400" href="data:image/png;base64,{png("face_" + name)}"/></svg>')
         parts.append(label(cx, y + size + 22, title, sub, "middle"))
 
+    # Weather icons.
+    weather_y = moods_y + 32 + size + 100
+    parts.append(f'<text x="40" y="{weather_y}" class="h">Weather icons</text>')
+    parts.append(f'<line x1="40" y1="{weather_y + 12}" x2="920" y2="{weather_y + 12}" class="rule"/>')
+    icons = [("clear", "Clear"), ("partly_cloudy", "Partly cloudy"), ("cloudy", "Cloudy"), ("fog", "Fog"),
+             ("drizzle", "Drizzle"), ("rain", "Rain and showers"), ("snow", "Snow"), ("thunder", "Thunder")]
+    iw, ih = 105, 88  # 84x70 icons at 1.25x
+    for i, (name, title) in enumerate(icons):
+        cx = 95 + i * 110
+        y = weather_y + 32
+        parts.append(f'<svg x="{cx - iw // 2}" y="{y}" width="{iw}" height="{ih}" viewBox="0 0 168 140">'
+                     f'<image width="400" height="400" href="data:image/png;base64,{png("weather_" + name)}"/></svg>')
+        parts.append(f'<text x="{cx}" y="{y + ih + 22}" text-anchor="middle" class="s">{title}</text>')
+
     # Board controls. Shows what each part does; the drawings aren't placed
     # where the parts sit on the board.
-    panel = moods_y + 32 + size + 100
+    panel = weather_y + 32 + ih + 100
     parts.append(f'<text x="40" y="{panel}" class="h">On the board</text>')
     parts.append(f'<line x1="40" y1="{panel + 12}" x2="920" y2="{panel + 12}" class="rule"/>')
     items = [

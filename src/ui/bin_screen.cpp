@@ -3,19 +3,20 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "doodles.h"
 #include "fonts.h"
-#include "mascot.h"
 
 namespace {
 
-// Layout, top to bottom: a speech bubble with the pickup day and the bins
-// going out, then the mascot "saying" it, with the weather beside it.
-constexpr int BUBBLE_X = 8, BUBBLE_Y = 10, BUBBLE_W = 184, BUBBLE_H = 92;
-constexpr int TAIL_X = 50;                  // where the tail meets the bubble
-constexpr int TAIL_HALF_W = 10;
-constexpr int TAIL_TIP_Y = BUBBLE_Y + BUBBLE_H + 16;
-constexpr int MASCOT_X = 10, MASCOT_Y = 110;  // 84px image
-constexpr int SIDE_RIGHT = 190;               // right edge of the weather column
+// Layout, top to bottom: a hand-drawn speech bubble with the pickup day and
+// the bins going out, then Binny "saying" it, with the midday forecast beside
+// it. Everything is a pen doodle or handwriting.
+constexpr int BUBBLE_X = 8, BUBBLE_Y = 4;     // 184x108 image, tail included
+constexpr int CENTRE_X = BUBBLE_X + 92;       // centre of the bubble's body
+constexpr int BIN_STEP = 42;                  // between bin icons (34px)
+constexpr int MASCOT_X = 8, MASCOT_Y = 112;   // 84px image
+constexpr int WEATHER_X = 112, WEATHER_Y = 116;  // 84x70 image
+constexpr int STATUS_X = 90, STATUS_Y = 116, STATUS_STEP = 25;  // 22px icons, between Binny and the weather
 
 const char* const DAYS[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 
@@ -28,140 +29,129 @@ lv_obj_t* addLabel(lv_obj_t* parent, const char* text, const lv_font_t* font,
   return label;
 }
 
+lv_obj_t* addImage(lv_obj_t* parent, const lv_image_dsc_t* src, int x, int y) {
+  lv_obj_t* image = lv_image_create(parent);
+  lv_image_set_src(image, src);
+  lv_obj_set_pos(image, x, y);
+  return image;
+}
+
 int widthOf(lv_obj_t* obj) {
   lv_obj_update_layout(obj);
   return lv_obj_get_width(obj);
 }
 
-void placeCentred(lv_obj_t* obj, int centre_x, int y) {
-  lv_obj_set_pos(obj, centre_x - widthOf(obj) / 2, y);
+// Height of capital letters above the baseline. Handwriting fonts leave a lot
+// of room above the capitals, so rows are stacked by their ink rather than
+// their line boxes. Roughly right for Gochi Hand.
+int capHeight(const lv_font_t* font) {
+  return (font->line_height - font->base_line) * 72 / 100;
 }
 
-void addLine(lv_obj_t* parent, lv_point_precise_t* points, int width, lv_color_t color) {
-  lv_obj_t* line = lv_line_create(parent);
-  lv_line_set_points(line, points, 2);
-  lv_obj_set_style_line_width(line, width, 0);
-  lv_obj_set_style_line_color(line, color, 0);
-  lv_obj_set_style_line_rounded(line, true, 0);
-}
-
-// Diagonal slash across a box: a thick white line to cut a gap through what's
-// underneath, then a thin black one. Used for the offline Wi-Fi icon.
-void addSlash(lv_obj_t* parent, int x, int y, int w, int h) {
-  auto* points = new lv_point_precise_t[2]{{(lv_value_precise_t)x, (lv_value_precise_t)y},
-                                           {(lv_value_precise_t)(x + w), (lv_value_precise_t)(y + h)}};
-  addLine(parent, points, 6, lv_color_white());
-  addLine(parent, points, 2, lv_color_black());
+// Places a line of text centred on centre_x with the top of its capitals at
+// cap_top. Returns the y just below the baseline.
+int placeText(lv_obj_t* label, int centre_x, int cap_top) {
+  const lv_font_t* font = lv_obj_get_style_text_font(label, LV_PART_MAIN);
+  const int ascent = font->line_height - font->base_line;
+  lv_obj_set_pos(label, centre_x - widthOf(label) / 2, cap_top - (ascent - capHeight(font)));
+  return cap_top + capHeight(font);
 }
 
 const lv_image_dsc_t* mascotFace(const BinScreenData& data) {
-  if (!data.wifiConnected || data.isStale) return &mascot_emoji_worried;
-  if (data.batteryLow) return &mascot_emoji_sleepy;
-  if (data.isTonight) return &mascot_emoji_excited;
-  if (data.isToday) return &mascot_emoji_proud;
+  if (!data.wifiConnected || data.isStale) return &doodle_face_worried;
+  if (data.batteryLow) return &doodle_face_sleepy;
+  if (data.isTonight) return &doodle_face_excited;
+  if (data.isToday) return &doodle_face_proud;
   // Ordinary days alternate, so the face changes daily.
-  return data.dayNumber % 2 ? &mascot_emoji_wink : &mascot_emoji_happy;
+  return data.dayNumber % 2 ? &doodle_face_wink : &doodle_face_happy;
+}
+
+const lv_image_dsc_t* weatherIcon(Sky sky) {
+  switch (sky) {
+    case Sky::Clear: return &doodle_weather_clear;
+    case Sky::PartlyCloudy: return &doodle_weather_partly_cloudy;
+    case Sky::Cloudy: return &doodle_weather_cloudy;
+    case Sky::Fog: return &doodle_weather_fog;
+    case Sky::Drizzle: return &doodle_weather_drizzle;
+    case Sky::Rain: return &doodle_weather_rain;
+    case Sky::Snow: return &doodle_weather_snow;
+    case Sky::Thunder: return &doodle_weather_thunder;
+    default: return nullptr;
+  }
 }
 
 void addBubble(lv_obj_t* screen, const BinScreenData& data) {
   const bool loud = data.isTonight || data.isToday;
   const lv_color_t ink = loud ? lv_color_white() : lv_color_black();
+  addImage(screen, loud ? &doodle_bubble_loud : &doodle_bubble, BUBBLE_X, BUBBLE_Y);
 
-  lv_obj_t* bubble = lv_obj_create(screen);
-  lv_obj_remove_style_all(bubble);
-  lv_obj_set_pos(bubble, BUBBLE_X, BUBBLE_Y);
-  lv_obj_set_size(bubble, BUBBLE_W, BUBBLE_H);
-  lv_obj_set_style_radius(bubble, 14, 0);
-  lv_obj_set_style_border_width(bubble, 3, 0);
-  lv_obj_set_style_border_color(bubble, lv_color_black(), 0);
-  lv_obj_set_style_border_opa(bubble, LV_OPA_COVER, 0);
-  lv_obj_set_style_bg_color(bubble, loud ? lv_color_black() : lv_color_white(), 0);
-  lv_obj_set_style_bg_opa(bubble, LV_OPA_COVER, 0);
-  lv_obj_set_scrollable(bubble, false);
-
-  // Tail pointing down at the mascot.
-  static lv_point_precise_t left[] = {{TAIL_X - TAIL_HALF_W, BUBBLE_Y + BUBBLE_H - 2}, {TAIL_X, TAIL_TIP_Y}};
-  static lv_point_precise_t right[] = {{TAIL_X + TAIL_HALF_W, BUBBLE_Y + BUBBLE_H - 2}, {TAIL_X, TAIL_TIP_Y}};
-  static lv_point_precise_t gap[] = {{TAIL_X - TAIL_HALF_W + 3, BUBBLE_Y + BUBBLE_H - 2},
-                                     {TAIL_X + TAIL_HALF_W - 3, BUBBLE_Y + BUBBLE_H - 2}};
+  int bins_y;
   if (loud) {
-    // Fill the tail so it matches the black bubble.
-    for (int k = -TAIL_HALF_W + 2; k <= TAIL_HALF_W - 2; k += 2) {
-      auto* fill = new lv_point_precise_t[2]{
-          {(lv_value_precise_t)(TAIL_X + k), (lv_value_precise_t)(BUBBLE_Y + BUBBLE_H - 2)},
-          {TAIL_X, (lv_value_precise_t)TAIL_TIP_Y}};
-      addLine(screen, fill, 3, lv_color_black());
-    }
-  } else {
-    addLine(screen, gap, 4, lv_color_white());  // open the bubble's border where the tail joins
-  }
-  addLine(screen, left, 3, lv_color_black());
-  addLine(screen, right, 3, lv_color_black());
-
-  const int centre = BUBBLE_W / 2;
-  if (loud) {
-    placeCentred(addLabel(bubble, data.isTonight ? "TONIGHT" : "TODAY", &font_bold_32, ink), centre, 8);
+    lv_obj_t* word = addLabel(screen, data.isTonight ? "TONIGHT" : "TODAY", &font_hand_38, ink);
+    bins_y = placeText(word, CENTRE_X, BUBBLE_Y + 14) + 12;
   } else {
     char day[12];
     snprintf(day, sizeof(day), "%s %d", DAYS[dayOfWeek(data.pickup)], data.pickup.day);
-    placeCentred(addLabel(bubble, data.isStale ? "Last known" : "Bins out", &font_bold_14, ink), centre, 4);
-    placeCentred(addLabel(bubble, day, &font_bold_32, ink), centre, 20);
+    lv_obj_t* intro = addLabel(screen, data.isStale ? "Last known" : "Bins out", &font_hand_20, ink);
+    const int below = placeText(intro, CENTRE_X, BUBBLE_Y + 9);
+    bins_y = placeText(addLabel(screen, day, &font_hand_42, ink), CENTRE_X, below + 7) + 8;
   }
 
   // The bins going out, in a centred row.
-  const char* icons[3];
+  const lv_image_dsc_t* bins[3];
   int count = 0;
-  if (data.rubbish) icons[count++] = ICON_TRASH_CAN;
-  if (data.recycling) icons[count++] = ICON_RECYCLE;
-  if (data.foodScraps) icons[count++] = ICON_APPLE;
-  constexpr int ICON_STEP = 42;
+  if (data.rubbish) bins[count++] = &doodle_bin_rubbish;
+  if (data.recycling) bins[count++] = &doodle_bin_recycling;
+  if (data.foodScraps) bins[count++] = &doodle_bin_food;
   for (int i = 0; i < count; ++i) {
-    lv_obj_t* icon = addLabel(bubble, icons[i], &icons_30, ink);
-    placeCentred(icon, centre + (2 * i - (count - 1)) * ICON_STEP / 2, 49);
+    const int centre = CENTRE_X + (2 * i - (count - 1)) * BIN_STEP / 2;
+    lv_obj_t* bin = addImage(screen, bins[i], centre - bins[i]->header.w / 2, bins_y);
+    lv_obj_set_style_image_recolor(bin, ink, 0);
+    lv_obj_set_style_image_recolor_opa(bin, LV_OPA_COVER, 0);
   }
 }
 
-// Temperature over humidity, right-aligned beside the mascot, with status
-// icons below only when something needs attention.
-void addSide(lv_obj_t* screen, const BinScreenData& data) {
-  char temperature[12];
-  char humidity[8];
-  if (data.hasClimate) {
-    snprintf(temperature, sizeof(temperature), "%d\xC2\xB0" "C", std::clamp(data.temperatureC, -9, 99));
-    snprintf(humidity, sizeof(humidity), "%d%%", std::clamp(data.humidityPct, 0, 99));
-  } else {
-    snprintf(temperature, sizeof(temperature), "--\xC2\xB0" "C");
-    snprintf(humidity, sizeof(humidity), "--%%");
-  }
-
-  const bool issues = !data.wifiConnected || data.batteryLow || data.isStale;
-  const int top = issues ? 124 : 134;  // centred beside the mascot, or raised to fit the icons
-
-  lv_obj_t* t = addLabel(screen, temperature, &font_bold_18);
-  lv_obj_set_pos(t, SIDE_RIGHT - widthOf(t), top);
-  lv_obj_t* h = addLabel(screen, humidity, &font_bold_18);
-  const int hx = SIDE_RIGHT - widthOf(h);
-  lv_obj_set_pos(h, hx, top + 26);
-  lv_obj_t* drop = addLabel(screen, ICON_DROPLET, &icons_18);
-  lv_obj_set_pos(drop, hx - widthOf(drop) - 3, top + 26);
-
-  if (!issues) return;
-  int x = SIDE_RIGHT;
-  const int y = top + 52;
-  // Right to left. Returns the icon's width; x moves to its left edge.
-  auto addIcon = [&](const char* glyph) {
-    lv_obj_t* icon = addLabel(screen, glyph, &icons_18);
-    const int w = widthOf(icon);
-    x -= w;
-    lv_obj_set_pos(icon, x, y);
-    return w;
+// Status icons, stacked in the gap between Binny and the weather, only when
+// something needs attention. Returns how many were drawn.
+int addStatus(lv_obj_t* screen, const BinScreenData& data) {
+  int count = 0;
+  auto add = [&](const lv_image_dsc_t* icon) {
+    addImage(screen, icon, STATUS_X, STATUS_Y + count++ * STATUS_STEP);
   };
-  if (data.isStale) x -= addIcon(ICON_STALE) ? 8 : 0;
-  if (data.batteryLow) x -= addIcon(ICON_BATTERY_LOW) ? 8 : 0;
-  if (!data.wifiConnected) {
-    const int w = addIcon(ICON_WIFI);
-    addSlash(screen, x, y, w, 18);
+  if (!data.wifiConnected) add(&doodle_status_offline);
+  if (data.batteryLow) add(&doodle_status_battery);
+  if (data.isStale) add(&doodle_status_stale);
+  return count;
+}
+
+// The midday forecast: an icon with the temperature written small over its
+// lower left. Without a forecast, the indoor temperature, large.
+void addWeather(lv_obj_t* screen, const BinScreenData& data, int status_icons) {
+  char temperature[12];
+  if (data.hasTemperature) {
+    snprintf(temperature, sizeof(temperature), "%d\xC2\xB0", std::clamp(data.temperatureC, -9, 99));
+  } else {
+    snprintf(temperature, sizeof(temperature), "--\xC2\xB0");
   }
+
+  const lv_image_dsc_t* icon = weatherIcon(data.sky);
+  if (icon == nullptr) {
+    constexpr int centre = WEATHER_X + 42;
+    const int below = placeText(addLabel(screen, temperature, &font_hand_42), centre, WEATHER_Y + 12);
+    if (data.hasTemperature) placeText(addLabel(screen, "inside", &font_hand_20), centre, below + 10);
+    return;
+  }
+
+  addImage(screen, icon, WEATHER_X, WEATHER_Y);
+  // A white patch behind the text keeps it readable over the drawing.
+  lv_obj_t* label = addLabel(screen, temperature, &font_hand_24);
+  lv_obj_set_style_bg_color(label, lv_color_white(), 0);
+  lv_obj_set_style_bg_opa(label, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_hor(label, 3, 0);
+  lv_obj_set_style_radius(label, 6, 0);
+  // Offset left of the icon so most of it stays visible, unless a third
+  // status icon sits there.
+  lv_obj_set_pos(label, status_icons >= 3 ? WEATHER_X + 3 : WEATHER_X - 8, WEATHER_Y + 46);
 }
 
 }  // namespace
@@ -174,11 +164,7 @@ lv_obj_t* createBinScreen(const BinScreenData& data) {
   lv_obj_set_scrollable(screen, false);
 
   addBubble(screen, data);
-
-  lv_obj_t* mascot = lv_image_create(screen);
-  lv_image_set_src(mascot, mascotFace(data));
-  lv_obj_set_pos(mascot, MASCOT_X, MASCOT_Y);
-
-  addSide(screen, data);
+  addImage(screen, mascotFace(data), MASCOT_X, MASCOT_Y);
+  addWeather(screen, data, addStatus(screen, data));
   return screen;
 }

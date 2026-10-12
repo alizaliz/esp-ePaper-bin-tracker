@@ -10,7 +10,7 @@
 
 #include "lvgl.h"
 
-#include "mascot.h"
+#include "doodles.h"
 #include "ui/bin_screen.h"
 #include "ui/mono_convert.h"
 
@@ -108,9 +108,9 @@ int main(int argc, char** argv) {
   upcoming.rubbish = true;
   upcoming.foodScraps = true;
   upcoming.wifiConnected = true;
-  upcoming.hasClimate = true;
-  upcoming.temperatureC = 14;
-  upcoming.humidityPct = 72;
+  upcoming.sky = Sky::PartlyCloudy;
+  upcoming.hasTemperature = true;
+  upcoming.temperatureC = 18;
   render(display, upcoming, out + "/upcoming.png");
 
   BinScreenData next_day = upcoming;  // the daily face change
@@ -120,18 +120,22 @@ int main(int argc, char** argv) {
   BinScreenData tonight = upcoming;
   tonight.isTonight = true;
   tonight.recycling = true;
+  tonight.sky = Sky::Rain;
+  tonight.temperatureC = 12;
   render(display, tonight, out + "/tonight.png");
 
   BinScreenData today = tonight;
   today.isTonight = false;
   today.isToday = true;
+  today.sky = Sky::Clear;
+  today.temperatureC = 21;
   render(display, today, out + "/today.png");
 
-  BinScreenData widest = upcoming;  // widest date text and readings
+  BinScreenData widest = upcoming;  // widest date text and temperature
   widest.pickup = {2026, 9, 30};
   widest.recycling = true;
+  widest.sky = Sky::Snow;
   widest.temperatureC = -9;
-  widest.humidityPct = 99;
   render(display, widest, out + "/widest.png");
 
   BinScreenData stale = upcoming;  // schedule out of date
@@ -142,31 +146,56 @@ int main(int argc, char** argv) {
   low.batteryLow = true;
   render(display, low, out + "/low_battery.png");
 
-  BinScreenData offline = upcoming;  // every problem at once
+  BinScreenData indoor = upcoming;  // no forecast: the onboard sensor's reading
+  indoor.sky = Sky::Unknown;
+  indoor.temperatureC = 9;
+  render(display, indoor, out + "/indoor.png");
+
+  BinScreenData offline = indoor;  // every problem at once
   offline.wifiConnected = false;
   offline.batteryLow = true;
   offline.isStale = true;
-  offline.hasClimate = false;
   render(display, offline, out + "/offline.png");
-  // Each of the mascot's faces on its own, at the top left of a blank
-  // screen, for the README diagram.
+
+  BinScreenData problems_forecast = upcoming;  // every problem, with a forecast cached
+  problems_forecast.wifiConnected = false;
+  problems_forecast.batteryLow = true;
+  problems_forecast.isStale = true;
+  render(display, problems_forecast, out + "/offline_forecast.png");
+
+  BinScreenData nothing = offline;  // no forecast and no sensor
+  nothing.hasTemperature = false;
+  render(display, nothing, out + "/no_temperature.png");
+  // Each of Binny's faces and the weather icons on its own, at the top left
+  // of a blank screen, for the README diagram.
   const struct {
     const char* name;
     const lv_image_dsc_t* image;
-  } faces[] = {{"happy", &mascot_emoji_happy},   {"wink", &mascot_emoji_wink},
-               {"excited", &mascot_emoji_excited}, {"proud", &mascot_emoji_proud},
-               {"worried", &mascot_emoji_worried}, {"sleepy", &mascot_emoji_sleepy}};
-  for (const auto& face : faces) {
+  } pieces[] = {{"face_happy", &doodle_face_happy},
+                {"face_wink", &doodle_face_wink},
+                {"face_excited", &doodle_face_excited},
+                {"face_proud", &doodle_face_proud},
+                {"face_worried", &doodle_face_worried},
+                {"face_sleepy", &doodle_face_sleepy},
+                {"weather_clear", &doodle_weather_clear},
+                {"weather_partly_cloudy", &doodle_weather_partly_cloudy},
+                {"weather_cloudy", &doodle_weather_cloudy},
+                {"weather_fog", &doodle_weather_fog},
+                {"weather_drizzle", &doodle_weather_drizzle},
+                {"weather_rain", &doodle_weather_rain},
+                {"weather_snow", &doodle_weather_snow},
+                {"weather_thunder", &doodle_weather_thunder}};
+  for (const auto& piece : pieces) {
     lv_obj_t* screen = lv_obj_create(nullptr);
     lv_obj_set_style_bg_color(screen, lv_color_white(), 0);
     lv_obj_t* image = lv_image_create(screen);
-    lv_image_set_src(image, face.image);
+    lv_image_set_src(image, piece.image);
     lv_obj_set_pos(image, 0, 0);
     lv_screen_load(screen);
     lv_refr_now(display);
     std::vector<uint8_t> frame(WIDTH * HEIGHT / 8);
     mono::threshold(grey.data(), frame.data(), WIDTH, HEIGHT);
-    writePng(out + "/face_" + face.name + ".png", frame, 2);
+    writePng(out + "/" + piece.name + ".png", frame, 2);
     lv_obj_delete(screen);
   }
   return 0;

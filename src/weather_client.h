@@ -2,12 +2,22 @@
 
 #include "esp_err.h"
 
-// Today's average outdoor temperature and humidity from Open-Meteo
-// (open-meteo.com), a free weather API that needs no key. "Today" is the
-// local day in Auckland. Needs a network connection.
+#include "collection_types.h"
+#include "weather_types.h"
+
+// The midday forecast from Open-Meteo (open-meteo.com), a free weather API
+// that needs no key, for today and tomorrow in Auckland time. Needs a
+// network connection.
 namespace weather {
 
-esp_err_t fetchDailyMean(double latitude, double longitude, float& temperature_c,
-                         float& humidity_pct);
+struct Midday {
+  bool valid = false;
+  Date date;
+  float temperatureC = 0;
+  Sky sky = Sky::Unknown;
+};
+
+// Fills days[0] with today's 12:00 forecast and days[1] with tomorrow's.
+esp_err_t fetchMidday(double latitude, double longitude, Midday (&days)[2]);
 
 }  // namespace weather

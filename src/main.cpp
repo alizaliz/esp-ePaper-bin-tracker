@@ -94,19 +94,18 @@ RTC_DATA_ATTR static time_t last_update_check = 0;
 
 static esp_timer_handle_t awake_cap_timer = nullptr;
 
-struct Climate {
+// Onboard sensor reading, shown when there's no forecast.
+struct IndoorReading {
   bool valid;
   float temperatureC;
-  float humidityPct;
 };
 
-// Today's weather is a daily average, so it's fetched once a day and reused
-// by later wakes (bin night, retries, PWR presses).
-struct DailyWeather {
-  Date date;
-  Climate climate;
-};
-RTC_DATA_ATTR static DailyWeather cached_weather = {};
+// The screen shows the next midday: today's until FORECAST_SWITCH_HOUR, then
+// tomorrow's (so the bin night reminder shows collection day's weather).
+// Both are fetched together and reused by later wakes (bin night, retries,
+// PWR presses).
+static const int FORECAST_SWITCH_HOUR = 14;
+RTC_DATA_ATTR static weather::Midday cached_forecast[2] = {};
 
 static void log_wakeup_cause(void) {
   const uint32_t causes = esp_sleep_get_wakeup_causes();
@@ -129,12 +128,13 @@ static bool clock_is_set(void) {
   return time(nullptr) > 1735689600;  // 2025-01-01
 }
 
-static Date local_today(void) {
-  const time_t now = time(nullptr);
+static Date local_date(time_t t) {
   struct tm local;
-  localtime_r(&now, &local);
+  localtime_r(&t, &local);
   return {local.tm_year + 1900, local.tm_mon + 1, local.tm_mday};
 }
+
+static Date local_today(void) { return local_date(time(nullptr)); }
 
 // Year to resolve the Council's year-less dates against: the clock's year, or
 // the firmware build year if the clock hasn't been set.
@@ -398,33 +398,52 @@ static void blink_led(const char* reason, const BlinkStep (&pattern)[N]) {
 
 // Onboard SHTC3 sensor. Read straight after waking, before Wi-Fi and the
 // display warm the board.
-static Climate read_sensor(void) {
-  Climate climate = {};
-  if (shtc3::read(climate.temperatureC, climate.humidityPct) == ESP_OK) {
-    climate.valid = true;
-    climate.temperatureC += settings::get().temperatureOffsetC;
-    printf("Sensor: %.1f C, %.1f %%\n", climate.temperatureC, climate.humidityPct);
+static IndoorReading read_sensor(void) {
+  IndoorReading reading = {};
+  float humidity_pct;
+  if (shtc3::read(reading.temperatureC, humidity_pct) == ESP_OK) {
+    reading.valid = true;
+    reading.temperatureC += settings::get().temperatureOffsetC;
+    printf("Sensor: %.1f C, %.1f %%\n", reading.temperatureC, humidity_pct);
   } else {
     printf("Failed to read the temperature and humidity sensor\n");
   }
-  return climate;
+  return reading;
 }
 
-static Climate fetch_weather(void) {
-  if (clock_is_set() && cached_weather.climate.valid && cached_weather.date == local_today()) {
-    return cached_weather.climate;
+// The midday forecast to show (see FORECAST_SWITCH_HOUR), from the cache if
+// it has it.
+static weather::Midday cached_midday(void) {
+  if (!clock_is_set()) return {};
+  time_t t = time(nullptr);
+  struct tm local;
+  localtime_r(&t, &local);
+  if (local.tm_hour >= FORECAST_SWITCH_HOUR) t += 24 * 60 * 60;
+  const Date wanted = local_date(t);
+  for (const auto& day : cached_forecast) {
+    if (day.valid && day.date == wanted) return day;
   }
-  Climate climate = {};
-  if (weather::fetchDailyMean(settings::get().latitude, settings::get().longitude, climate.temperatureC,
-                              climate.humidityPct) == ESP_OK) {
-    climate.valid = true;
-    printf("Weather (today's mean): %.1f C, %.1f %%\n", climate.temperatureC,
-           climate.humidityPct);
-    if (clock_is_set()) cached_weather = {local_today(), climate};
-  } else {
+  return {};
+}
+
+static weather::Midday fetch_weather(void) {
+  weather::Midday midday = cached_midday();
+  if (midday.valid) return midday;
+  weather::Midday days[2];
+  if (weather::fetchMidday(settings::get().latitude, settings::get().longitude, days) != ESP_OK) {
     printf("Failed to fetch the weather\n");
+    return {};
   }
-  return climate;
+  for (const auto& day : days) {
+    if (day.valid) {
+      printf("Forecast for %04d-%02d-%02d 12:00: %.1f C, %s\n", day.date.year, day.date.month,
+             day.date.day, day.temperatureC, skyName(day.sky));
+    }
+  }
+  if (!clock_is_set()) return days[0];
+  cached_forecast[0] = days[0];
+  cached_forecast[1] = days[1];
+  return cached_midday();
 }
 
 // Fetches the schedule and works out the next pickup day and which bins go out.
@@ -471,7 +490,8 @@ static bool schedule_is_stale(void) {
 }
 
 // Redraws the screen. Returns true if it shows the bin night reminder.
-static bool refresh_display(bool online, const Climate& climate, int battery_pct) {
+static bool refresh_display(bool online, const weather::Midday& forecast,
+                            const IndoorReading& indoor) {
   if (!last_schedule.valid) {
     printf("No schedule yet; leaving the display unchanged\n");
     return false;
@@ -491,9 +511,14 @@ static bool refresh_display(bool online, const Climate& climate, int battery_pct
   data.batteryLow = battery_low;
   // Advances by one each night, so the mascot's face varies day to day.
   data.dayNumber = clock_is_set() ? (int)(time(nullptr) / 86400) : 0;
-  data.hasClimate = climate.valid;
-  data.temperatureC = (int)lroundf(climate.temperatureC);
-  data.humidityPct = (int)lroundf(climate.humidityPct);
+  if (forecast.valid && forecast.sky != Sky::Unknown) {
+    data.sky = forecast.sky;
+    data.hasTemperature = true;
+    data.temperatureC = (int)lroundf(forecast.temperatureC);
+  } else if (indoor.valid) {
+    data.hasTemperature = true;
+    data.temperatureC = (int)lroundf(indoor.temperatureC);
+  }
 
   if (DisplayManager().show(data) != ESP_OK) {
     printf("Failed to update the display\n");
@@ -539,8 +564,8 @@ static bool full_refresh(int battery_pct) {
   };
   int wifi_ms = 0, clock_ms = 0, weather_ms = 0, schedule_ms = 0, update_ms = 0;
 
-  const Climate sensor = read_sensor();
-  Climate weather = {};
+  const IndoorReading sensor = read_sensor();
+  weather::Midday forecast;
 
   // Wi-Fi is only on for as long as the fetches take.
   lap();
@@ -567,7 +592,7 @@ static bool full_refresh(int battery_pct) {
     }
     clock_ms = lap();
     if (settings::get().useOnlineWeather) {
-      weather = fetch_weather();
+      forecast = fetch_weather();
     }
     weather_ms = lap();
     Schedule schedule;
@@ -597,8 +622,12 @@ static bool full_refresh(int battery_pct) {
     printf("Today is %04d-%02d-%02d\n", today.year, today.month, today.day);
   }
 
+  // Offline, or the fetch failed: a forecast fetched earlier may still cover
+  // the right day.
+  if (!forecast.valid && settings::get().useOnlineWeather) forecast = cached_midday();
+
   lap();
-  const bool tonight = refresh_display(online, weather.valid ? weather : sensor, battery_pct);
+  const bool tonight = refresh_display(online, forecast, sensor);
   const int display_ms = lap();
   printf("Timing (ms): Wi-Fi %d, clock %d, weather %d, schedule %d, update check %d, display %d\n",
          wifi_ms, clock_ms, weather_ms, schedule_ms, update_ms, display_ms);

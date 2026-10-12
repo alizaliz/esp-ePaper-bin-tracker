@@ -3,6 +3,7 @@
 #include "lvgl.h"
 
 #include "../collection_types.h"
+#include "../weather_types.h"
 
 // Everything shown on the main screen.
 struct BinScreenData {
@@ -19,9 +20,11 @@ struct BinScreenData {
   bool wifiConnected = false;  // whether this refresh got online
   bool batteryLow = false;
 
-  bool hasClimate = false;  // false if no temperature/humidity source worked
+  // The midday forecast. Without one (sky Unknown), temperatureC is the
+  // onboard sensor's indoor reading, if hasTemperature.
+  Sky sky = Sky::Unknown;
+  bool hasTemperature = false;
   int temperatureC = 0;
-  int humidityPct = 0;
 
   // Changes once a day (e.g. days since 1970), to vary the mascot's face on
   // ordinary days. 0 if the date isn't known.

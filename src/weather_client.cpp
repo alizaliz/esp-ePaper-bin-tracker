@@ -12,23 +12,23 @@ namespace weather {
 namespace {
 
 constexpr const char* TAG = "weather";
-constexpr size_t MAX_BYTES = 4096;  // the response is about 400 bytes
+constexpr size_t MAX_BYTES = 8192;  // the response is about 2KB
 // A fetch normally takes about 1.3 seconds. Occasionally the connection to
 // Germany stalls; the onboard sensor is the fallback, so don't wait long.
 constexpr int TIMEOUT_MS = 5000;
+constexpr int MIDDAY = 12;
 
 }  // namespace
 
-esp_err_t fetchDailyMean(double latitude, double longitude, float& temperature_c,
-                         float& humidity_pct) {
+esp_err_t fetchMidday(double latitude, double longitude, Midday (&days)[2]) {
   char url[256];
   snprintf(url, sizeof(url),
            // Plain HTTP: Open-Meteo's servers are in Germany, and a TLS
            // handshake that far takes the board 3-10 seconds, against about 1
            // without. The data isn't sensitive. Everything else uses HTTPS.
            "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
-           "&daily=temperature_2m_mean,relative_humidity_2m_mean"
-           "&timezone=Pacific%%2FAuckland&forecast_days=1",
+           "&hourly=temperature_2m,weather_code"
+           "&timezone=Pacific%%2FAuckland&forecast_days=2",
            latitude, longitude);
 
   std::string body;
@@ -40,22 +40,35 @@ esp_err_t fetchDailyMean(double latitude, double longitude, float& temperature_c
                                  TIMEOUT_MS),
                       TAG, "request failed");
 
-  // {"daily":{"time":["2026-10-05"],"temperature_2m_mean":[12.2],
-  //  "relative_humidity_2m_mean":[74]},...}
+  // {"hourly":{"time":["2026-10-12T00:00",...],"temperature_2m":[12.2,...],
+  //  "weather_code":[3,...]},...}, one entry per local hour from midnight.
   cJSON* root = cJSON_Parse(body.c_str());
   ESP_RETURN_ON_FALSE(root != nullptr, ESP_ERR_INVALID_RESPONSE, TAG, "invalid JSON");
-  const cJSON* daily = cJSON_GetObjectItem(root, "daily");
-  const cJSON* temperature =
-      cJSON_GetArrayItem(cJSON_GetObjectItem(daily, "temperature_2m_mean"), 0);
-  const cJSON* humidity =
-      cJSON_GetArrayItem(cJSON_GetObjectItem(daily, "relative_humidity_2m_mean"), 0);
-  const bool ok = cJSON_IsNumber(temperature) && cJSON_IsNumber(humidity);
-  if (ok) {
-    temperature_c = static_cast<float>(temperature->valuedouble);
-    humidity_pct = static_cast<float>(humidity->valuedouble);
+  const cJSON* hourly = cJSON_GetObjectItem(root, "hourly");
+  const cJSON* times = cJSON_GetObjectItem(hourly, "time");
+  const cJSON* temperatures = cJSON_GetObjectItem(hourly, "temperature_2m");
+  const cJSON* codes = cJSON_GetObjectItem(hourly, "weather_code");
+  for (int d = 0; d < 2; ++d) {
+    days[d] = {};
+    const int i = d * 24 + MIDDAY;
+    const cJSON* time = cJSON_GetArrayItem(times, i);
+    const cJSON* temperature = cJSON_GetArrayItem(temperatures, i);
+    const cJSON* code = cJSON_GetArrayItem(codes, i);
+    Midday m;
+    int hour = -1;
+    if (!cJSON_IsString(time) || !cJSON_IsNumber(temperature) || !cJSON_IsNumber(code) ||
+        sscanf(time->valuestring, "%d-%d-%dT%d", &m.date.year, &m.date.month, &m.date.day,
+               &hour) != 4 ||
+        hour != MIDDAY) {
+      continue;
+    }
+    m.valid = true;
+    m.temperatureC = static_cast<float>(temperature->valuedouble);
+    m.sky = skyFromWmoCode(code->valueint);
+    days[d] = m;
   }
   cJSON_Delete(root);
-  ESP_RETURN_ON_FALSE(ok, ESP_ERR_INVALID_RESPONSE, TAG, "missing fields");
+  ESP_RETURN_ON_FALSE(days[0].valid, ESP_ERR_INVALID_RESPONSE, TAG, "missing fields");
   return ESP_OK;
 }
 

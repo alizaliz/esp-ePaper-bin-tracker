@@ -8,8 +8,9 @@ A battery-powered e-paper display that shows your next Auckland Council rubbish,
 
 - Shows which bins go out on the next pickup day, and when it is
 - Reminds you the evening before (`TONIGHT`) and on the day (`TODAY`)
-- Binny, an emoji mascot whose face changes with the day and the board's mood
-- Today's average temperature and humidity
+- Binny, a doodled mascot whose face changes with the day and the board's mood
+- The midday weather forecast, as an icon and a temperature
+- Drawn throughout in a hand-drawn, pen-on-paper style
 - Keeps working through Wi-Fi outages, and only shows status icons when something needs attention
 - Blinks the LED when the battery needs charging
 - Updates its own firmware from this project's releases
@@ -64,13 +65,13 @@ The page also sets the reminder time, the low battery level, the screen orientat
 | --- | --- | --- |
 | Wi-Fi network and password | none | Must be a 2.4GHz network |
 | Assessment number | none | Identifies your address on the Council website |
-| Outdoor weather | on | Off shows the onboard sensor (indoor) instead |
+| Midday forecast | on | Off shows the onboard sensor's indoor temperature instead |
 | Latitude and longitude | central Auckland | Location for the weather |
 | Show TONIGHT from | 18:00 | Time on the evening before a pickup when the reminder appears |
 | Blink the LED at TONIGHT | on | |
 | Low battery reminder | 10% | The LED double-blinks below this charge. 0 turns it off. |
 | USB-C end at the top | on | Rotates the screen 180° |
-| Dither greyscale images | off | Shades greys with dots instead of a hard threshold. Binny is already dithered, so this mostly makes text grainier; best left off. |
+| Dither greyscale images | off | Shades greys with dots instead of a hard threshold. The drawings are already black and white, so this only makes text grainier; best left off. |
 | Indoor sensor correction | 0°C | Added to the onboard sensor's temperature |
 | Fallback refresh interval | 24 hours | Only used until the clock has been set |
 | Stay awake on USB | on | Keeps the board awake while a computer is connected, for flashing, logs and this page |
@@ -83,7 +84,7 @@ To build your own defaults into the firmware instead, copy `src/config.example.h
 ### 4. Check it's working
 Within about 15 seconds of restarting, the screen redraws. The log (in `pio device monitor`, or under **Device log** on the settings page) shows something like:
 ```
-Weather (today's mean): 13.6 C, 73.0 %
+Forecast for 2026-10-07 12:00: 16.4 C, partly cloudy
 Next pickup 2026-10-08: rubbish 1, recycling 1, food scraps 1
 Next refresh at 2026-10-07 00:05
 Computer connected over USB: staying awake for flashing, logs and the config page.
@@ -101,7 +102,7 @@ While it's plugged into a computer, the board stays awake. Unplug it, or run it 
 | `no Wi-Fi network set` | Set up Wi-Fi on the settings page. |
 | `no connection to "<SSID>"` | Check the Wi-Fi name and password, and that the network is 2.4GHz. |
 | `collection dates not found` or HTTP 406 | HTTP 406 means the Council website refused the connection: it blocks VPNs, so the board's network must connect directly. Otherwise, check the Assessment number. If it's right, the Council website layout may have changed (see Data sources under [How it works](#how-it-works)). |
-| Screen shows `--` for temperature and humidity | Neither the online weather nor the onboard sensor could be read. |
+| Screen shows `--°` instead of the weather | Neither the forecast nor the onboard sensor could be read. |
 
 </details>
 
@@ -116,15 +117,15 @@ While it's plugged into a computer, the board stays awake. Unplug it, or run it 
 | Out of date | Low battery | Several problems |
 | :---: | :---: | :---: |
 | ![Schedule out of date](docs/images/screen_stale.png) | ![Low battery](docs/images/screen_low_battery.png) | ![Offline, low battery and out of date](docs/images/screen_offline.png) |
-| The dates may be old | The LED also blinks | Offline, low battery and out of date |
+| The dates may be old | The LED also blinks | Offline, low battery and out of date, with no forecast |
 
 - **Speech bubble:** the next pickup day, e.g. `THU 8`, and icons for the bins going out on it. From 6pm the evening before, the bubble turns black and says `TONIGHT`; on the day it says `TODAY`.
-- **Binny:** the emoji below the bubble. On ordinary days it alternates between happy and cheeky; it's star-struck on bin night, cool in sunglasses on collection day, worried when offline or the dates may be old, and sleepy when the battery is low.
-- **Weather:** today's average temperature and humidity, beside Binny.
-- **Status icons:** only when something needs attention: a slashed Wi-Fi icon when this refresh couldn't get online, a battery when it's low, and a history icon when the dates may be old.
+- **Binny:** the face below the bubble. On ordinary days it alternates between happy and cheeky; it's star-struck on bin night, cool in sunglasses on collection day, worried when offline or the dates may be old, and sleepy when the battery is low.
+- **Weather:** the forecast for midday, beside Binny: an icon (sun, sun and cloud, cloud, fog, drizzle, rain, snow or thunder) with the temperature written over its lower left. Until 2pm it's today's midday; after that, tomorrow's, so the `TONIGHT` reminder shows the weather for collection day.
+- **Status icons:** only when something needs attention, between Binny and the weather: a slashed Wi-Fi icon when this refresh couldn't get online, a battery when it's low, and a clock turning back when the dates may be old.
 - **Out of date:** when the pickup day has passed, the last successful fetch was over 48 hours ago, or the board lost power and couldn't get online, the bubble says "Last known" and `TODAY` and `TONIGHT` aren't shown.
 
-Temperature and humidity come from Open-Meteo. If that can't be fetched, the onboard sensor's indoor reading is used instead.
+The forecast comes from Open-Meteo. If there's no forecast for the right day (the board has never been online, or the fetch failed), the screen shows the onboard sensor's temperature, labelled "inside".
 
 ### Daily routine
 The board spends almost all its time in deep sleep. The e-paper screen keeps its image with no power, so the schedule stays visible.
@@ -168,7 +169,7 @@ Once a night, after fetching the schedule, the board checks this project's [late
 <summary>Data sources</summary>
 
 - **Collection days:** the Council's collection day page for your address, `.../rubbish-recycling-collection-days/<assessment number>.html`. The page is about 2.7MB, but the household collection dates are in the first ~16KB, so the board stops reading once it has them. Dates come without a year, such as `Thursday, 8 October`, so the year is taken as the one in which that date falls on that weekday. This relies on the page's HTML rather than a published API, so a site redesign can break it.
-- **Weather:** [Open-Meteo](https://open-meteo.com) daily mean temperature and humidity for your location, in Auckland time. It's free and needs no API key. It's fetched once a day and reused by later wakes. The request uses plain HTTP: Open-Meteo's servers are in Germany, and setting up an encrypted connection that far takes the board 3–10 seconds instead of about 1. The weather data isn't sensitive; everything else uses HTTPS.
+- **Weather:** [Open-Meteo](https://open-meteo.com) hourly forecast for your location, in Auckland time: the 12:00 temperature and weather code for today and tomorrow. It's free and needs no API key. One request covers both days, so it's fetched about once a day and reused by later wakes, including the evening reminder. The request uses plain HTTP: Open-Meteo's servers are in Germany, and setting up an encrypted connection that far takes the board 3–10 seconds instead of about 1. The weather data isn't sensitive; everything else uses HTTPS.
 - **Time:** NTP from `nz.pool.ntp.org`, on every wake that gets online. The clock keeps running through deep sleep.
 - **Firmware updates:** the board follows `github.com/<repo>/releases/latest` to find the newest release's tag, then downloads `bin-tracker-<tag>-app.bin` from it. It doesn't use GitHub's API, which only allows 60 requests an hour per network without a login.
 
@@ -200,7 +201,7 @@ A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync und
 | --- | --- |
 | `src/main.cpp` | Wake, refresh, scheduling and deep sleep |
 | `src/auckland_council_client.*`, `src/council_parser.*` | Fetch and parse the collection day page |
-| `src/weather_client.*` | Daily average weather from Open-Meteo |
+| `src/weather_client.*`, `src/weather_types.h` | Midday forecast from Open-Meteo, and its weather icons |
 | `src/network.*`, `src/https_client.*` | Wi-Fi, NTP and streaming HTTPS |
 | `src/settings.*`, `src/config_service.*` | Settings, and the settings page's USB serial channel |
 | `src/storage.*`, `src/stats.*` | Values saved in flash, and the daily battery log |
@@ -211,12 +212,12 @@ A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync und
 | `src/shtc3.*`, `src/battery.*` | Onboard sensor and battery reading |
 | `src/board_power.*`, `src/board_pins.h` | I2C, the I/O expander (panel power, battery hold, LED) and pins |
 | `src/config.example.h` | Default settings built into the firmware |
-| `components/fonts/` | Generated fonts: Montserrat Bold and Font Awesome icons |
-| `components/mascot/` | Generated mascot images |
+| `components/fonts/` | Generated fonts: Gochi Hand |
+| `components/doodles/` | Generated drawings: the bubble, bins, weather, Binny and status icons |
 | `docs/config/` | The settings page (Web Serial), published with GitHub Pages |
 | `docs/images/` | README images |
 | `tests/` | Council parser tests, fixture and the live page check |
-| `tools/fonts/`, `tools/mascot/` | Generators for the fonts and the mascot |
+| `tools/fonts/`, `tools/doodles/` | Generators for the fonts and the drawings |
 | `tools/preview/` | Renders the screen to PNGs on a computer |
 | `tools/docs/` | Regenerates the README images |
 | `.github/workflows/` | CI and releases |
@@ -244,15 +245,15 @@ pio run                              # once, so LVGL is downloaded
 ./tools/preview/run.sh               # writes PNGs to tools/preview/out/
 python3 tools/docs/make_images.py    # refreshes docs/images/ and the diagram
 ```
-The preview uses the same layout code, fonts, mascot images and black and white conversion as the firmware. It renders each screen state and each of Binny's faces, and warns if anything is drawn off screen. It needs a C/C++ compiler and zlib, both included with macOS.
+The preview uses the same layout code, fonts, drawings and black and white conversion as the firmware. It renders each screen state, each of Binny's faces and each weather icon, and warns if anything is drawn off screen. It needs a C/C++ compiler and zlib, both included with macOS.
 
 </details>
 
 <details>
-<summary>Fonts, icons and the mascot</summary>
+<summary>Fonts and drawings</summary>
 
-- Fonts are compiled into the firmware as bitmaps and contain only the characters the screen uses. To add characters, icons or sizes, edit `tools/fonts/generate.sh` and run it. It needs Node.js. Then add any new font to `components/fonts/CMakeLists.txt` and `fonts.h`.
-- Binny's faces are drawn as SVG in `tools/mascot/make_emoji.py`, which rasterises them, dithers them to black and white, and writes 1-bit LVGL images to `components/mascot/` (about 1KB each). Edit the drawings there and run `python3 tools/mascot/make_emoji.py`; it needs macOS (Quick Look and `sips` do the rasterising). Pre-dithering keeps the shading the same whatever the dithering setting.
+- The handwriting is [Gochi Hand](https://fonts.google.com/specimen/Gochi+Hand). Fonts are compiled into the firmware as bitmaps and contain only the characters the screen uses. To add characters or sizes, edit `tools/fonts/generate.sh` and run it. It needs Node.js. Then add any new font to `components/fonts/CMakeLists.txt` and `fonts.h`.
+- Every drawing (the speech bubble, bins, weather, Binny and the status icons) is SVG in `tools/doodles/make_doodles.py`. It draws each line twice, slightly offset, roughens them with an SVG turbulence filter so they wobble like pen on paper, then rasterises, thresholds and writes 1-bit LVGL images with transparent backgrounds to `components/doodles/`. Edit the drawings there and run `python3 tools/doodles/make_doodles.py`; it needs macOS (Quick Look and `sips` do the rasterising).
 
 </details>
 
@@ -270,7 +271,6 @@ Board specs, pinout and schematic: [Waveshare docs](https://docs.waveshare.com/E
 </details>
 
 ## Licences
-- Project code and the mascot artwork: MIT (see `LICENSE`)
-- Montserrat font: SIL Open Font License 1.1
-- Font Awesome Free icons: CC BY 4.0; font files SIL Open Font License 1.1 ([fontawesome.com/license/free](https://fontawesome.com/license/free))
+- Project code and the drawings: MIT (see `LICENSE`)
+- Gochi Hand font, copyright 2011 Juan Pablo del Peral (Huerta Tipográfica): SIL Open Font License 1.1
 - Weather data: [Open-Meteo](https://open-meteo.com), CC BY 4.0, free for non-commercial use
