@@ -117,8 +117,10 @@ def build_diagram():
                  f'Ordinary days: one at random, never the same two days running</text>')
     face_row(ordinary, moods_y + 56, 110)
     special_y = moods_y + 56 + size + 60
-    face_row([("excited", "Star-struck", "bin night"), ("proud", "Cool", "collection day"),
-              ("worried", "Worried", "offline or old data"), ("sleepy", "Sleepy", "low battery")], special_y, 150)
+    face_row([("excited", "Star-struck", "bin night"), ("party", "Party", "bin night"),
+              ("hearts", "Heart eyes", "bin night"), ("proud", "Cool", "collection day"),
+              ("laugh", "Laughing", "collection day"), ("halo", "Halo", "collection day"),
+              ("worried", "Worried", "offline, old data"), ("sleepy", "Sleepy", "low battery")], special_y, 110)
     moods_end = special_y + size + 40
 
     # Weather icons.

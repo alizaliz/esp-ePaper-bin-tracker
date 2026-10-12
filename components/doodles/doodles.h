@@ -36,7 +36,11 @@ LV_IMAGE_DECLARE(doodle_face_melty);
 LV_IMAGE_DECLARE(doodle_face_glasses);
 LV_IMAGE_DECLARE(doodle_face_hot);
 LV_IMAGE_DECLARE(doodle_face_excited);  // bin night: star eyes
+LV_IMAGE_DECLARE(doodle_face_party);    // bin night: party hat and horn
+LV_IMAGE_DECLARE(doodle_face_hearts);   // bin night: heart eyes
 LV_IMAGE_DECLARE(doodle_face_proud);    // collection day: sunglasses
+LV_IMAGE_DECLARE(doodle_face_laugh);    // collection day: laughing
+LV_IMAGE_DECLARE(doodle_face_halo);     // collection day: halo
 LV_IMAGE_DECLARE(doodle_face_worried);  // offline or out of date
 LV_IMAGE_DECLARE(doodle_face_sleepy);   // low battery
 

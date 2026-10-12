@@ -87,10 +87,12 @@ FACE = ('<circle cx="42" cy="42" r="36" stroke-width="2.6"/><circle cx="42.8" cy
         + "".join(f'<path d="M{50 + k * 4} {74 - k * 1.5} L{74 - k * 1.5} {50 + k * 4}" stroke-width="1.1"/>' for k in range(4)))
 EYES = '<ellipse cx="31" cy="36" rx="3" ry="4.5" fill="#000"/><ellipse cx="53" cy="36" rx="3" ry="4.5" fill="#000"/>'
 # The melting face has its own outline: the head sags into a puddle.
-MELTY = (twice("M12 40 A30 30 0 0 1 72 38 C73 50 69 57 71 63 C73 69 82 69 82 75 C82 80 68 80 42 80 "
-               "C16 80 2 80 2 75 C2 70 11 69 13 63 C15 56 11 50 12 40 Z", 2.6)
+# The melting face has its own outline: the head tips over to the right and
+# sags into a flat puddle.
+MELTY = (twice("M11 36 A30 30 0 0 1 70 47 C70 54 69 59 71 64 C73 69 82 69 82 75 C82 80 68 80 42 80 "
+               "C16 80 2 80 2 75 C2 70 11 69 12 63 C13 54 10 46 11 36 Z", 2.6)
          + twice("M18 74 Q30 72 40 75 M50 73 Q60 71 68 74", 1.2, 0.3, 0.2)  # ripples in the puddle
-         + "".join(f'<path d="M{56 + k * 4} {69 - k * 0.8} L{64 + k * 2} {59 - k * 3}" stroke-width="1.1"/>' for k in range(3)))
+         + "".join(f'<path d="M{56 + k * 4} {70 - k * 0.8} L{63 + k * 2} {61 - k * 3}" stroke-width="1.1"/>' for k in range(3)))
 FACES = {
     "happy": EYES + twice("M27 50 Q42 64 57 50", 2.4),
     "wink": ('<ellipse cx="31" cy="36" rx="3" ry="4.5" fill="#000"/>' + twice("M48 37 Q53 31 58 37", 2.2)
@@ -103,10 +105,10 @@ FACES = {
                 + '<circle cx="47" cy="56" r="4" stroke-width="2.4"/>'
                 + twice("M78.5 11 L78.5 1 Q84 3 82.5 8", 1.6)  # a music note
                 + '<ellipse cx="75.5" cy="11.5" rx="3.5" ry="2.6" fill="#000" transform="rotate(-20 75.5 11.5)"/>'),
-    "melty": ('<ellipse cx="31" cy="34" rx="3" ry="4.5" fill="#000" transform="rotate(-10 31 34)"/>'
-              '<ellipse cx="53" cy="33" rx="3" ry="4.5" fill="#000" transform="rotate(-10 53 33)"/>'
-              + twice("M26 46 Q34 56 44 50 Q50 46 58 48", 2.4)
-              + twice("M24 64 Q23 70 26 71", 1.8)),  # a drip
+    "melty": ('<g transform="rotate(22 40 42)">'
+              '<ellipse cx="29" cy="34" rx="3" ry="4.5" fill="#000"/><ellipse cx="51" cy="34" rx="3" ry="4.5" fill="#000"/>'
+              + twice("M25 47 Q38 60 53 47", 2.4) + "</g>"
+              + twice("M20 64 Q19 70 22 71", 1.8)),  # a drip
     "glasses": ('<circle cx="31" cy="36" r="2.6" fill="#000"/><circle cx="53" cy="36" r="2.6" fill="#000"/>'
                 + twice("M40 36 A9 9 0 1 1 22 36 A9 9 0 1 1 40 36 Z M62 36 A9 9 0 1 1 44 36 A9 9 0 1 1 62 36 Z", 2.2)
                 + twice("M40 34 Q42 32 44 34 M22 34 L10 31 M62 34 L74 31", 2)
@@ -117,6 +119,26 @@ FACES = {
             + twice("M15 46 L18 41 M19 47 L22 42 M62 47 L65 42 M66 46 L69 41", 1.3, 0.3, 0.2)
             + twice("M14 18 C16 22 17 24 17 26 A3.5 3.5 0 0 1 10 26 C10 24 12 22 14 18 Z", 1.6)
             + twice("M72 12 C74 16 75 18 75 20 A3.5 3.5 0 0 1 68 20 C68 18 70 16 72 12 Z", 1.6)),
+    "party": ('<path d="M6 33 L33 6 L2 2 Z" fill="#fff" stroke-width="3"/>'  # hat on the head's top left
+              + '<path d="M9 25 L25 9 L21 7.5 L7.5 21 Z M8 14 L14 8 L9.5 6 L6 9.5 Z" fill="#000" stroke-width="1"/>'
+              + '<circle cx="3" cy="3" r="3" fill="#000"/>'
+              + twice("M28 38 Q33 32 38 38 M48 38 Q53 32 58 38", 2.4)
+              + '<path d="M44 53 L45 58 L21 72 L15 61 Z" fill="#fff" stroke-width="2.4"/>'  # party horn
+              + '<path d="M33 57 L35 63 M26 60 L29 67" stroke-width="2"/>'
+              + twice("M40 51 Q48 58 57 51", 2.2)
+              + '<circle cx="70" cy="34" r="1.8" fill="#000"/><circle cx="77" cy="46" r="1.8" fill="#000"/>'
+              '<circle cx="8" cy="48" r="1.8" fill="#000"/>'
+              + twice("M62 14 L66 18 M70 24 L74 22 M6 76 L10 73", 1.8)),
+    "hearts": (twice("M31 45 C24 40 20 36 21 31 C22 27 28 26 31 31 C34 26 40 27 41 31 C42 36 38 40 31 45 Z", 1.4, fill="#000")
+               .replace('transform="translate(0.6 0.4)"', 'transform="translate(-0.6 0)"')
+               + twice("M53 45 C46 40 42 36 43 31 C44 27 50 26 53 31 C56 26 62 27 63 31 C64 36 60 40 53 45 Z", 1.4, fill="#000")
+               + twice("M27 53 L57 53 Q55 68 42 68 Q29 68 27 53 Z", 1.8, fill="#000")),
+    "laugh": (twice("M24 30 L35 36 L24 42 M60 30 L49 36 L60 42", 2.4)
+              + twice("M25 49 L59 49 Q57 69 42 69 Q27 69 25 49 Z", 1.8, fill="#000")
+              + '<path d="M34 62 Q42 56 50 62 Q48 68 42 68 Q36 68 34 62 Z" fill="#fff" stroke-width="1.2"/>'),  # tongue
+    "halo": (twice("M24 38 Q31 43 38 38 M46 38 Q53 43 60 38", 2.2) + twice("M27 52 Q42 64 57 52", 2.4)
+             + '<ellipse cx="42" cy="6" rx="22" ry="5" fill="#fff" stroke-width="2.4"/>'
+             + '<ellipse cx="42.5" cy="6.4" rx="21.4" ry="4.5" fill="none" stroke-width="1.1"/>'),
     "excited": (twice(star(28, 39, 10), 1.4, fill="#000") + twice(star(56, 39, 10), 1.4, fill="#000")
                 + '<path d="M27 52 Q42 72 57 52 Z" fill="#000" stroke-width="2"/>' + twice("M6 10 L10 14 M78 10 L74 14", 2)),
     "proud": (twice("M19 30 L65 30 L63 38 Q60 45 52 45 Q45 45 44 36 L40 36 Q39 45 32 45 Q24 45 21 38 Z", 1.8, fill="#000")
@@ -130,8 +152,8 @@ FACES = {
 # Name -> (width, height, SVG body, wobble). Small pieces wobble less so they
 # stay legible.
 ART = {
-    "bubble": (184, 108, twice(BUBBLE, 2.6), 1.3),
-    "bubble_loud": (184, 108, f'<path d="{BUBBLE}" fill="#000" stroke-width="2.6"/>', 1.3),
+    "bubble": (184, 108, twice(BUBBLE, 3.4), 1.3),
+    "bubble_loud": (184, 108, f'<path d="{BUBBLE}" fill="#000" stroke-width="3.4"/>', 1.3),
     # Bins, 34px.
     "bin_rubbish": (34, 34, twice("M5 9 L29 8") + twice("M13 8 L14 4 L21 4 L21 8") + twice("M8 10 L10 31 L25 31 L27 10")
                     + twice("M13.5 14 L14.5 27", 1.6) + twice("M18 14 L18 27", 1.6) + twice("M22 14 L21.5 27", 1.6), 1.0),

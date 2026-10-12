@@ -63,25 +63,39 @@ const lv_image_dsc_t* const ORDINARY_FACES[] = {
 };
 constexpr int ORDINARY_COUNT = sizeof(ORDINARY_FACES) / sizeof(ORDINARY_FACES[0]);
 
-// A face picked at random for each day, never the same as the day before.
-// Each day steps on from the previous one by a scrambled amount, replayed from
-// day 0 (about 20,000 steps, well under a millisecond), so the same day always
+const lv_image_dsc_t* const TONIGHT_FACES[] = {&doodle_face_excited, &doodle_face_party,
+                                                &doodle_face_hearts};
+const lv_image_dsc_t* const TODAY_FACES[] = {&doodle_face_proud, &doodle_face_laugh,
+                                              &doodle_face_halo};
+
+// A well-mixed number for a day, so picks look random but the same day always
 // gets the same face and redraws agree.
+uint32_t scramble(int day) {
+  uint32_t h = static_cast<uint32_t>(day) * 2654435761u;
+  return h ^ (h >> 15);
+}
+
+// An ordinary day's face, never the same as the day before. Each day steps on
+// from the previous one by a scrambled amount, replayed from day 0 (about
+// 20,000 steps, well under a millisecond).
 const lv_image_dsc_t* ordinaryFace(int day) {
   int pick = 0;
   for (int d = 1; d <= day; ++d) {
-    uint32_t h = static_cast<uint32_t>(d) * 2654435761u;
-    h ^= h >> 15;
-    pick = (pick + 1 + static_cast<int>(h % (ORDINARY_COUNT - 1))) % ORDINARY_COUNT;
+    pick = (pick + 1 + static_cast<int>(scramble(d) % (ORDINARY_COUNT - 1))) % ORDINARY_COUNT;
   }
   return ORDINARY_FACES[pick];
+}
+
+template <size_t N>
+const lv_image_dsc_t* randomFace(const lv_image_dsc_t* const (&faces)[N], int day) {
+  return faces[scramble(day) % N];
 }
 
 const lv_image_dsc_t* mascotFace(const BinScreenData& data) {
   if (!data.wifiConnected || data.isStale) return &doodle_face_worried;
   if (data.batteryLow) return &doodle_face_sleepy;
-  if (data.isTonight) return &doodle_face_excited;
-  if (data.isToday) return &doodle_face_proud;
+  if (data.isTonight) return randomFace(TONIGHT_FACES, data.dayNumber);
+  if (data.isToday) return randomFace(TODAY_FACES, data.dayNumber);
   return ordinaryFace(data.dayNumber);
 }
 
@@ -113,7 +127,7 @@ void addBubble(lv_obj_t* screen, const BinScreenData& data) {
     snprintf(day, sizeof(day), "%s %d", DAYS[dayOfWeek(data.pickup)], data.pickup.day);
     lv_obj_t* intro = addLabel(screen, data.isStale ? "Last known" : "Bins out", &font_hand_20, ink);
     const int below = placeText(intro, CENTRE_X, BUBBLE_Y + 9);
-    bins_y = placeText(addLabel(screen, day, &font_hand_42, ink), CENTRE_X, below + 7) + 8;
+    bins_y = placeText(addLabel(screen, day, &font_hand_42, ink), CENTRE_X, below + 10) + 7;
   }
 
   // The bins going out, in a centred row.
