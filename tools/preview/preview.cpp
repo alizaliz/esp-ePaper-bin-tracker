@@ -173,6 +173,12 @@ int main(int argc, char** argv) {
     const lv_image_dsc_t* image;
   } pieces[] = {{"face_happy", &doodle_face_happy},
                 {"face_wink", &doodle_face_wink},
+                {"face_grin", &doodle_face_grin},
+                {"face_blush", &doodle_face_blush},
+                {"face_whistle", &doodle_face_whistle},
+                {"face_melty", &doodle_face_melty},
+                {"face_glasses", &doodle_face_glasses},
+                {"face_hot", &doodle_face_hot},
                 {"face_excited", &doodle_face_excited},
                 {"face_proud", &doodle_face_proud},
                 {"face_worried", &doodle_face_worried},

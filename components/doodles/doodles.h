@@ -26,9 +26,15 @@ LV_IMAGE_DECLARE(doodle_weather_rain);
 LV_IMAGE_DECLARE(doodle_weather_snow);
 LV_IMAGE_DECLARE(doodle_weather_thunder);
 
-// Binny, 84px
+// Binny, 84px. Happy to hot are picked at random on ordinary days.
 LV_IMAGE_DECLARE(doodle_face_happy);
 LV_IMAGE_DECLARE(doodle_face_wink);
+LV_IMAGE_DECLARE(doodle_face_grin);
+LV_IMAGE_DECLARE(doodle_face_blush);
+LV_IMAGE_DECLARE(doodle_face_whistle);
+LV_IMAGE_DECLARE(doodle_face_melty);
+LV_IMAGE_DECLARE(doodle_face_glasses);
+LV_IMAGE_DECLARE(doodle_face_hot);
 LV_IMAGE_DECLARE(doodle_face_excited);  // bin night: star eyes
 LV_IMAGE_DECLARE(doodle_face_proud);    // collection day: sunglasses
 LV_IMAGE_DECLARE(doodle_face_worried);  // offline or out of date

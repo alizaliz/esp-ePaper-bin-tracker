@@ -57,13 +57,32 @@ int placeText(lv_obj_t* label, int centre_x, int cap_top) {
   return cap_top + capHeight(font);
 }
 
+const lv_image_dsc_t* const ORDINARY_FACES[] = {
+    &doodle_face_happy,   &doodle_face_grin,  &doodle_face_wink,    &doodle_face_blush,
+    &doodle_face_whistle, &doodle_face_melty, &doodle_face_glasses, &doodle_face_hot,
+};
+constexpr int ORDINARY_COUNT = sizeof(ORDINARY_FACES) / sizeof(ORDINARY_FACES[0]);
+
+// A face picked at random for each day, never the same as the day before.
+// Each day steps on from the previous one by a scrambled amount, replayed from
+// day 0 (about 20,000 steps, well under a millisecond), so the same day always
+// gets the same face and redraws agree.
+const lv_image_dsc_t* ordinaryFace(int day) {
+  int pick = 0;
+  for (int d = 1; d <= day; ++d) {
+    uint32_t h = static_cast<uint32_t>(d) * 2654435761u;
+    h ^= h >> 15;
+    pick = (pick + 1 + static_cast<int>(h % (ORDINARY_COUNT - 1))) % ORDINARY_COUNT;
+  }
+  return ORDINARY_FACES[pick];
+}
+
 const lv_image_dsc_t* mascotFace(const BinScreenData& data) {
   if (!data.wifiConnected || data.isStale) return &doodle_face_worried;
   if (data.batteryLow) return &doodle_face_sleepy;
   if (data.isTonight) return &doodle_face_excited;
   if (data.isToday) return &doodle_face_proud;
-  // Ordinary days alternate, so the face changes daily.
-  return data.dayNumber % 2 ? &doodle_face_wink : &doodle_face_happy;
+  return ordinaryFace(data.dayNumber);
 }
 
 const lv_image_dsc_t* weatherIcon(Sky sky) {

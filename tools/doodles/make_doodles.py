@@ -86,10 +86,37 @@ STATUS_GRID = '<g transform="scale(1.2222)">'  # 18 -> 22px
 FACE = ('<circle cx="42" cy="42" r="36" stroke-width="2.6"/><circle cx="42.8" cy="41.5" r="35.4" stroke-width="1.2"/>'
         + "".join(f'<path d="M{50 + k * 4} {74 - k * 1.5} L{74 - k * 1.5} {50 + k * 4}" stroke-width="1.1"/>' for k in range(4)))
 EYES = '<ellipse cx="31" cy="36" rx="3" ry="4.5" fill="#000"/><ellipse cx="53" cy="36" rx="3" ry="4.5" fill="#000"/>'
+# The melting face has its own outline: the head sags into a puddle.
+MELTY = (twice("M12 40 A30 30 0 0 1 72 38 C73 50 69 57 71 63 C73 69 82 69 82 75 C82 80 68 80 42 80 "
+               "C16 80 2 80 2 75 C2 70 11 69 13 63 C15 56 11 50 12 40 Z", 2.6)
+         + twice("M18 74 Q30 72 40 75 M50 73 Q60 71 68 74", 1.2, 0.3, 0.2)  # ripples in the puddle
+         + "".join(f'<path d="M{56 + k * 4} {69 - k * 0.8} L{64 + k * 2} {59 - k * 3}" stroke-width="1.1"/>' for k in range(3)))
 FACES = {
     "happy": EYES + twice("M27 50 Q42 64 57 50", 2.4),
     "wink": ('<ellipse cx="31" cy="36" rx="3" ry="4.5" fill="#000"/>' + twice("M48 37 Q53 31 58 37", 2.2)
              + twice("M28 51 Q42 60 56 51", 2.2) + twice("M44 55 Q46 63 51 60 Q52 55 49 53", 1.8)),
+    "grin": (twice("M24 39 Q31 30 38 39 M46 39 Q53 30 60 39", 2.4)
+             + twice("M25 48 L59 48 Q57 68 42 68 Q27 68 25 48 Z", 1.8, fill="#000")),
+    "blush": (EYES + twice("M29 51 Q42 61 55 51", 2.4)
+              + twice("M17 53 L20 48 M21 54 L24 49 M25 55 L28 50 M56 55 L59 50 M60 54 L63 49 M64 53 L67 48", 1.3, 0.3, 0.2)),
+    "whistle": (EYES + twice("M25 28 Q31 24 37 28 M47 28 Q53 24 59 28", 1.8)
+                + '<circle cx="47" cy="56" r="4" stroke-width="2.4"/>'
+                + twice("M78.5 11 L78.5 1 Q84 3 82.5 8", 1.6)  # a music note
+                + '<ellipse cx="75.5" cy="11.5" rx="3.5" ry="2.6" fill="#000" transform="rotate(-20 75.5 11.5)"/>'),
+    "melty": ('<ellipse cx="31" cy="34" rx="3" ry="4.5" fill="#000" transform="rotate(-10 31 34)"/>'
+              '<ellipse cx="53" cy="33" rx="3" ry="4.5" fill="#000" transform="rotate(-10 53 33)"/>'
+              + twice("M26 46 Q34 56 44 50 Q50 46 58 48", 2.4)
+              + twice("M24 64 Q23 70 26 71", 1.8)),  # a drip
+    "glasses": ('<circle cx="31" cy="36" r="2.6" fill="#000"/><circle cx="53" cy="36" r="2.6" fill="#000"/>'
+                + twice("M40 36 A9 9 0 1 1 22 36 A9 9 0 1 1 40 36 Z M62 36 A9 9 0 1 1 44 36 A9 9 0 1 1 62 36 Z", 2.2)
+                + twice("M40 34 Q42 32 44 34 M22 34 L10 31 M62 34 L74 31", 2)
+                + twice("M27 53 Q42 66 57 53", 2.4) + twice("M38 57 L38 63 L46 63 L46 57 M42 58 L42 63", 1.6)),
+    "hot": (twice("M24 35 Q31 39 38 35 M46 35 Q53 39 60 35", 2.2)
+            + '<path d="M28 50 Q42 46 56 50 Q54 62 42 62 Q30 62 28 50 Z" fill="#000" stroke-width="2"/>'
+            + twice("M36 56 Q36 71 42 71 Q48 71 48 56", 1.8, fill="#fff") + twice("M42 58 L42 66", 1.2)
+            + twice("M15 46 L18 41 M19 47 L22 42 M62 47 L65 42 M66 46 L69 41", 1.3, 0.3, 0.2)
+            + twice("M14 18 C16 22 17 24 17 26 A3.5 3.5 0 0 1 10 26 C10 24 12 22 14 18 Z", 1.6)
+            + twice("M72 12 C74 16 75 18 75 20 A3.5 3.5 0 0 1 68 20 C68 18 70 16 72 12 Z", 1.6)),
     "excited": (twice(star(28, 39, 10), 1.4, fill="#000") + twice(star(56, 39, 10), 1.4, fill="#000")
                 + '<path d="M27 52 Q42 72 57 52 Z" fill="#000" stroke-width="2"/>' + twice("M6 10 L10 14 M78 10 L74 14", 2)),
     "proud": (twice("M19 30 L65 30 L63 38 Q60 45 52 45 Q45 45 44 36 L40 36 Q39 45 32 45 Q24 45 21 38 Z", 1.8, fill="#000")
@@ -139,7 +166,7 @@ ART = {
                      + twice("M9.5 5.5 L9.5 9.5 L12.5 11.5", 1.6, 0.3, 0.2) + "</g>", 0.6),
 }
 for face, body in FACES.items():
-    ART[f"face_{face}"] = (84, 84, FACE + body, 1.3)
+    ART[f"face_{face}"] = (84, 84, (MELTY if face == "melty" else FACE) + body, 1.3)
 
 
 def rasterise(svg_text, w, h, tmp):

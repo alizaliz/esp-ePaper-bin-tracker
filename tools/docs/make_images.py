@@ -100,19 +100,29 @@ def build_diagram():
     moods_y = top + strip_h * SCALE + 110
     parts.append(f'<text x="40" y="{moods_y}" class="h">Binny\'s moods</text>')
     parts.append(f'<line x1="40" y1="{moods_y + 12}" x2="920" y2="{moods_y + 12}" class="rule"/>')
-    moods = [("happy", "Happy", "ordinary days"), ("wink", "Cheeky", "alternate days"),
-             ("excited", "Star-struck", "bin night"), ("proud", "Cool", "collection day"),
-             ("worried", "Worried", "offline or old data"), ("sleepy", "Sleepy", "low battery")]
-    size = 126  # 84px faces at 1.5x
-    for i, (name, title, sub) in enumerate(moods):
-        cx = 100 + i * 152
-        y = moods_y + 32
-        parts.append(f'<svg x="{cx - size // 2}" y="{y}" width="{size}" height="{size}" viewBox="0 0 168 168">'
-                     f'<image width="400" height="400" href="data:image/png;base64,{png("face_" + name)}"/></svg>')
-        parts.append(label(cx, y + size + 22, title, sub, "middle"))
+    size = 92  # 84px faces at 1.1x
+
+    def face_row(faces, y, step):
+        x0 = 480 - (len(faces) - 1) * step // 2
+        for i, (name, title, sub) in enumerate(faces):
+            cx = x0 + i * step
+            parts.append(f'<svg x="{cx - size // 2}" y="{y}" width="{size}" height="{size}" viewBox="0 0 168 168">'
+                         f'<image width="400" height="400" href="data:image/png;base64,{png("face_" + name)}"/></svg>')
+            parts.append(label(cx, y + size + 22, title, sub, "middle"))
+
+    ordinary = [("happy", "Happy", ""), ("grin", "Grinning", ""), ("wink", "Cheeky", ""),
+                ("blush", "Blushing", ""), ("whistle", "Whistling", ""), ("melty", "Melting", ""),
+                ("glasses", "Specs", ""), ("hot", "Hot", "")]
+    parts.append(f'<text x="480" y="{moods_y + 40}" text-anchor="middle" class="s">'
+                 f'Ordinary days: one at random, never the same two days running</text>')
+    face_row(ordinary, moods_y + 56, 110)
+    special_y = moods_y + 56 + size + 60
+    face_row([("excited", "Star-struck", "bin night"), ("proud", "Cool", "collection day"),
+              ("worried", "Worried", "offline or old data"), ("sleepy", "Sleepy", "low battery")], special_y, 150)
+    moods_end = special_y + size + 40
 
     # Weather icons.
-    weather_y = moods_y + 32 + size + 100
+    weather_y = moods_end + 70
     parts.append(f'<text x="40" y="{weather_y}" class="h">Weather icons</text>')
     parts.append(f'<line x1="40" y1="{weather_y + 12}" x2="920" y2="{weather_y + 12}" class="rule"/>')
     icons = [("clear", "Clear"), ("partly_cloudy", "Partly cloudy"), ("cloudy", "Cloudy"), ("fog", "Fog"),
