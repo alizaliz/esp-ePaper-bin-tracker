@@ -66,7 +66,11 @@ esp_err_t init() {
   ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(bus, &dev_config, &expander), TAG,
                       "TCA9554 add failed");
 
-  return setOutput(EXIO_BATTERY_HOLD, true);
+  ESP_RETURN_ON_ERROR(setOutput(EXIO_BATTERY_HOLD, true), TAG, "battery hold failed");
+  // The audio regulator's enable is pulled up on the board, so the codec and
+  // microphone are powered unless this pin is driven low. Nothing here uses
+  // them, so keep them off, including through deep sleep.
+  return setOutput(EXIO_AUDIO_POWER, false);
 }
 
 esp_err_t setEpdPower(bool on) {

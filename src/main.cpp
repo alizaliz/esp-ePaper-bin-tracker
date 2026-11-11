@@ -91,6 +91,13 @@ RTC_DATA_ATTR static int failed_refreshes = 0;
 // is false until the first fetch after power returns.
 RTC_DATA_ATTR static bool fetched_since_power_on = false;
 RTC_DATA_ATTR static time_t last_update_check = 0;
+// How fast the clock runs during deep sleep, as a fraction (0.003 = 0.3% fast),
+// measured at each clock sync. The chip's sleep clock is an RC oscillator
+// that can be several minutes a day out, so a board that wakes at "00:05"
+// could really wake before midnight. Sleeps are lengthened or shortened to
+// match. Cleared by power loss, like the clock itself.
+RTC_DATA_ATTR static float clock_drift = 0;
+RTC_DATA_ATTR static time_t last_clock_sync = 0;
 
 static esp_timer_handle_t awake_cap_timer = nullptr;
 
@@ -338,7 +345,10 @@ static void enter_deep_sleep(void) {
   printf("Awake for %lld ms; deep sleeping for %lld minutes\n", esp_timer_get_time() / 1000,
          sleep_s / 60);
   config_service::stop();
-  esp_sleep_enable_timer_wakeup((uint64_t)sleep_s * 1000000ULL);
+  // A clock that runs fast in deep sleep also ends the sleep early, so
+  // stretch the sleep by the measured drift to wake on time.
+  const double sleep_us = sleep_s * 1e6 * (1.0 + clock_drift);
+  esp_sleep_enable_timer_wakeup((uint64_t)sleep_us);
   esp_deep_sleep_start();
 }
 
@@ -588,8 +598,20 @@ static bool full_refresh(int battery_pct) {
       const int64_t expected_us = (int64_t)before.tv_sec * 1000000 + before.tv_usec +
                                   (esp_timer_get_time() - before_us);
       const int64_t actual_us = (int64_t)after.tv_sec * 1000000 + after.tv_usec;
-      printf("Clock corrected by %+.2f s\n", (actual_us - expected_us) / 1e6);
+      const double correction_s = (actual_us - expected_us) / 1e6;
+      printf("Clock corrected by %+.2f s\n", correction_s);
+      // Only measure over a long gap (mostly deep sleep), so the result is
+      // the sleep clock's error and isn't swamped by NTP's own precision.
+      const double elapsed_s = (double)after.tv_sec - last_clock_sync;
+      if (last_clock_sync != 0 && elapsed_s > 6 * 60 * 60) {
+        const double drift = -correction_s / elapsed_s;  // positive: the clock ran fast
+        if (fabs(drift) < 0.02) {
+          clock_drift = (float)drift;
+          printf("Sleep clock drift: %+.0f ppm\n", drift * 1e6);
+        }
+      }
     }
+    if (clock_is_set()) last_clock_sync = time(nullptr);
     clock_ms = lap();
     if (settings::get().useOnlineWeather) {
       forecast = fetch_weather();

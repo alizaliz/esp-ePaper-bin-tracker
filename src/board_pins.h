@@ -28,5 +28,6 @@
 // TCA9554 I/O expander and the pins it drives
 #define TCA9554_I2C_ADDRESS 0x20
 #define EXIO_EPD_POWER 0
+#define EXIO_AUDIO_POWER 1  // audio codec, microphone and their 3.3V regulator
 #define EXIO_LED 4  // green LED, active low
 #define EXIO_BATTERY_HOLD 5
