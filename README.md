@@ -51,7 +51,7 @@ Settings are made in a web page that talks to the board over USB, and are saved 
 
 1. Open the settings page, **[alizaliz.github.io/esp-ePaper-bin-tracker/config/](https://alizaliz.github.io/esp-ePaper-bin-tracker/config/)**, in a recent desktop Chrome, Edge or Firefox.
 2. Click **Connect** and choose the bin tracker. Close `pio device monitor` first, as only one program can use the port.
-3. Fill in your **Wi-Fi network**, your **Assessment number**, and your **location** for the weather. To find the Assessment number, search for your address on the [Council's collection day page](https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html); it's also the number at the end of the results page's address.
+3. Fill in your **Wi-Fi network**, your **Assessment number**, and your **location** for the weather. **Use this computer's location** fills in the weather location and shows your nearest street address, ready to search for on the Council's page. To find the Assessment number, search for your address on the [Council's collection day page](https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html); it's also the number at the end of the results page's address.
 4. Click **Save and restart**.
 
 To use the page offline, serve it locally with `python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/config` and open http://localhost:8765.
@@ -69,7 +69,7 @@ The page also sets the reminder time, the low battery level, the screen orientat
 | Latitude and longitude | central Auckland | Location for the weather |
 | Show TONIGHT from | 18:00 | Time on the evening before a pickup when the reminder appears |
 | Blink the LED at TONIGHT | on | |
-| Low battery reminder | 10% | The LED double-blinks below this charge. 0 turns it off. |
+| Low battery reminder | 10% | The LED double-blinks below this charge. 10 to 50%: it can't go lower, because the board switches itself off at 3.4V (about 3%) to protect the battery. |
 | USB-C end at the top | on | Rotates the screen 180° |
 | Dither greyscale images | off | Shades greys with dots instead of a hard threshold. The drawings are already black and white, so this only makes text grainier; best left off. |
 | Indoor sensor correction | 0°C | Added to the onboard sensor's temperature |

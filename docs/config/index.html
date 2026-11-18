@@ -60,6 +60,8 @@
   fieldset { border: none; padding: 0; margin: 0; }
   fieldset:disabled { opacity: 0.55; }
   details summary { cursor: pointer; font-weight: 600; }
+  #advanced h3 { font-size: 14px; margin: 20px 0 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+  #advanced h3:first-of-type { border-top: none; padding-top: 0; margin-top: 12px; }
   #log {
     margin: 12px 0 0; max-height: 240px; overflow: auto; font: 12px/1.4 ui-monospace, Menlo, monospace;
     background: var(--input); border: 1px solid var(--border); border-radius: 6px; padding: 8px;
@@ -144,13 +146,6 @@
     </div>
   </fieldset>
 
-  <div class="card">
-    <details>
-      <summary>Device log</summary>
-      <div id="log"></div>
-    </details>
-  </div>
-
   <form id="form" autocomplete="off">
     <fieldset id="fields" disabled>
       <div class="card">
@@ -161,6 +156,17 @@
         <label for="wifiPassword">Password</label>
         <input type="password" id="wifiPassword" maxlength="63">
         <div class="hint" id="passwordHint">Leave blank to keep the current password.</div>
+      </div>
+
+      <div class="card">
+        <h2>Location</h2>
+        <button type="button" id="locate">Use this computer's location</button>
+        <div class="hint">
+          Sets the weather location and finds your street address. Your browser asks before sharing
+          its location, and the street address is looked up on
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
+        </div>
+        <div id="locateResult" class="update-status" role="status" aria-live="polite" hidden></div>
       </div>
 
       <div class="card">
@@ -187,7 +193,6 @@
             <input type="number" id="longitude" step="0.0001" min="-180" max="180">
           </div>
         </div>
-        <div class="hint"><button type="button" class="link" id="locate">Use this computer's location</button></div>
       </div>
 
       <div class="card" id="reminders">
@@ -198,22 +203,22 @@
         <label class="check"><input type="checkbox" id="binNightLed"> Blink the LED at the TONIGHT reminder</label>
         <label for="lowBatteryPercent">Low battery reminder</label>
         <div class="battery">
-          <input type="range" id="lowBatteryPercent" min="0" max="50" step="1">
+          <input type="range" id="lowBatteryPercent" min="10" max="50" step="1">
           <output id="lowBatteryValue" for="lowBatteryPercent"></output>
         </div>
-        <div class="battery-scale"><span>0%</span><span>25%</span><span>50%</span></div>
+        <div class="battery-scale"><span>10%</span><span>30%</span><span>50%</span></div>
         <div class="hint" id="lowBatteryHint"></div>
       </div>
 
       <div class="card">
-        <h2>Display</h2>
-        <label class="check"><input type="checkbox" id="displayFlip"> USB-C end of the board at the top</label>
-        <label class="check"><input type="checkbox" id="displayDithering"> Dither greyscale images (shading instead of a hard threshold)</label>
-      </div>
-
-      <div class="card">
-        <details>
+        <details id="advanced">
           <summary>Advanced</summary>
+
+          <h3>Display</h3>
+          <label class="check"><input type="checkbox" id="displayFlip"> USB-C end of the board at the top</label>
+          <label class="check"><input type="checkbox" id="displayDithering"> Dither greyscale images (shading instead of a hard threshold)</label>
+
+          <h3>Sensor and power</h3>
           <label for="temperatureOffsetC">Indoor sensor temperature correction (°C)</label>
           <input type="number" id="temperatureOffsetC" step="0.1" min="-20" max="20">
           <label for="refreshIntervalHours">Fallback refresh interval (hours)</label>
@@ -221,6 +226,24 @@
           <div class="hint">Only used until the clock has been set over Wi-Fi.</div>
           <label class="check"><input type="checkbox" id="stayAwakeOnUsb"> Stay awake while connected to a computer</label>
           <div class="hint">Turning this off also stops this page from connecting, except straight after a restart.</div>
+
+          <h3>Battery log</h3>
+          <p class="hint" id="statsSummary" style="margin-top:0">Connect to see the board's daily battery readings.</p>
+          <div style="overflow-x:auto">
+            <table id="statsTable" style="width:100%; border-collapse:collapse; font-size:13px; display:none">
+              <thead><tr>
+                <th style="text-align:left">Day</th><th>Battery</th><th>Wakes</th><th>Awake</th><th>Wi-Fi</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="actions" style="margin-top:12px">
+            <button type="button" id="refreshStats" disabled>Refresh</button>
+            <button type="button" id="downloadStats" disabled>Download CSV</button>
+          </div>
+
+          <h3>Device log</h3>
+          <div id="log"></div>
         </details>
       </div>
 
@@ -231,23 +254,6 @@
       </div>
     </fieldset>
   </form>
-
-  <div class="card" style="margin-top:16px">
-    <h2>Battery log</h2>
-    <p class="hint" id="statsSummary" style="margin-top:0">Connect to see the board's daily battery readings.</p>
-    <div style="overflow-x:auto">
-      <table id="statsTable" style="width:100%; border-collapse:collapse; font-size:13px; display:none">
-        <thead><tr>
-          <th style="text-align:left">Day</th><th>Battery</th><th>Wakes</th><th>Awake</th><th>Wi-Fi</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <div class="actions" style="margin-top:12px">
-      <button type="button" id="refreshStats" disabled>Refresh</button>
-      <button type="button" id="downloadStats" disabled>Download CSV</button>
-    </div>
-  </div>
 
 </main>
 
@@ -461,9 +467,10 @@ function summariseStats(days) {
     if (span >= 3 && drop > 0) {
       const perDay = drop / span;
       const empty = Math.round(last.pct / perDay);
-      const reminder = Math.max(0, Math.round((last.pct - 10) / perDay));
+      const threshold = Number($("lowBatteryPercent").value);
+      const reminder = Math.max(0, Math.round((last.pct - threshold) / perDay));
       parts.push(`The battery is dropping about ${perDay.toFixed(1)}% a day: roughly ${empty} days `
-        + `until empty, and ${reminder} until the 10% charging reminder.`);
+        + `until empty, and ${reminder} until the ${threshold}% charging reminder.`);
     } else {
       parts.push("A battery life estimate needs at least three days of falling battery readings.");
     }
@@ -519,14 +526,15 @@ function levelColour(percent) {
 function updateBatterySlider() {
   const slider = $("lowBatteryPercent");
   const value = Number(slider.value);
+  const min = Number(slider.min), max = Number(slider.max);
   const box = slider.closest(".battery");
   box.style.setProperty("--level", levelColour(value));
-  slider.style.setProperty("--pct", `${(value / Number(slider.max)) * 100}%`);
+  slider.style.setProperty("--pct", `${((value - min) / (max - min)) * 100}%`);
   $("lowBatteryValue").textContent = `${value}%`;
-  $("lowBatteryHint").textContent = value === 0
-    ? "Off: the LED never blinks for low battery."
-    : `The LED double-blinks every 10 minutes once the battery drops below ${value}%, `
-      + `and stops above ${value + 5}%.`;
+  $("lowBatteryHint").textContent =
+    `The LED double-blinks every 10 minutes once the battery drops below ${value}%, `
+    + `and stops above ${value + 5}%. At 3.4V (about 3%) the board shows a "charge me" screen and `
+    + `switches itself off to protect the battery, so the reminder can't go below ${min}%.`;
 }
 $("lowBatteryPercent").addEventListener("input", updateBatterySlider);
 updateBatterySlider();
@@ -722,14 +730,86 @@ $("reset").addEventListener("click", async () => {
   if (await waitForRestart()) showMessage("Settings reset to the firmware defaults.", "ok");
 });
 
+// Location ----------------------------------------------------------------
+// Fills in the weather location, then finds the street address with
+// OpenStreetMap's Nominatim service (free, no key; fine for one lookup at a
+// time) so the Council's search can be done with the right address.
+
+const COUNCIL_SEARCH_URL = "https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/"
+  + "rubbish-recycling-collections/rubbish-recycling-collection-days.html";
+
+function setLocateResult(parts, kind = "") {
+  const box = $("locateResult");
+  box.replaceChildren(...parts);
+  box.className = "update-status" + (kind ? " " + kind : "");
+  box.hidden = !parts.length;
+}
+
+function link(text, href) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.textContent = text;
+  return a;
+}
+
+// "12 Example Street, Suburb" from Nominatim's address parts.
+function streetAddress(a) {
+  const street = [a.house_number, a.road].filter(Boolean).join(" ");
+  const area = a.suburb || a.neighbourhood || a.city_district || a.town || a.village || a.city;
+  return [street, area].filter(Boolean).join(", ");
+}
+
+function isAuckland(a) {
+  return a.country_code === "nz"
+    && [a.city, a.state, a.region, a.county].some((v) => v && v.includes("Auckland"));
+}
+
+async function lookUpStreetAddress(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18`
+    + `&lat=${lat}&lon=${lon}`;
+  const response = await fetch(url, { headers: { "Accept-Language": "en" } });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const place = await response.json();
+  if (!place.address) throw new Error("no address found");
+  return place.address;
+}
+
 $("locate").addEventListener("click", () => {
-  if (!navigator.geolocation) return showMessage("This browser can't share its location.", "error");
+  if (!navigator.geolocation) {
+    return setLocateResult(["This browser can't share its location."], "error");
+  }
+  setLocateResult(["Asking the browser for this computer's location..."]);
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      $("latitude").value = pos.coords.latitude.toFixed(4);
-      $("longitude").value = pos.coords.longitude.toFixed(4);
+    async (pos) => {
+      const lat = pos.coords.latitude.toFixed(4);
+      const lon = pos.coords.longitude.toFixed(4);
+      $("latitude").value = lat;
+      $("longitude").value = lon;
+      const weather = `Weather location set to ${lat}, ${lon}. `;
+      setLocateResult([weather + "Finding the street address..."]);
+      let address;
+      try {
+        address = await lookUpStreetAddress(lat, lon);
+      } catch {
+        return setLocateResult([weather + "Couldn't find a street address for it."], "error");
+      }
+      const street = streetAddress(address);
+      if (!isAuckland(address)) {
+        return setLocateResult([weather + `Nearest address: ${street || "unknown"}. Collection days are `
+          + "only available for Auckland Council addresses so far."]);
+      }
+      setLocateResult([
+        weather + `Nearest address: ${street}. Location from a computer can be a few houses out, so check it. `
+          + "To get the assessment number, search for your address on the ",
+        link("Council's collection day page", COUNCIL_SEARCH_URL),
+        " and copy it into Collection address below.",
+      ], "ok");
     },
-    () => showMessage("Couldn't get this computer's location.", "error"),
+    () => setLocateResult(["Couldn't get this computer's location. Check the browser allows this page to "
+      + "use it."], "error"),
+    { enableHighAccuracy: true, timeout: 15000 },
   );
 });
 </script>

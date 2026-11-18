@@ -1,5 +1,6 @@
 #include "settings.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -82,8 +83,9 @@ std::string validate(const Settings& s) {
     return "Longitude must be between -180 and 180";
   }
   if (s.binNightHour < 0 || s.binNightHour > 23) return "Bin night hour must be 0 to 23";
-  if (s.lowBatteryPercent < 0 || s.lowBatteryPercent > 50) {
-    return "Low battery level must be 0 to 50%";
+  if (s.lowBatteryPercent < MIN_LOW_BATTERY_PERCENT || s.lowBatteryPercent > MAX_LOW_BATTERY_PERCENT) {
+    return "Low battery reminder must be " + std::to_string(MIN_LOW_BATTERY_PERCENT) + " to " +
+           std::to_string(MAX_LOW_BATTERY_PERCENT) + "%";
   }
   if (!std::isfinite(s.temperatureOffsetC) || std::fabs(s.temperatureOffsetC) > 20) {
     return "Temperature offset must be between -20 and 20";
@@ -107,10 +109,17 @@ std::string copyString(const cJSON* item, char* dest, size_t size, const char* n
 void load() {
   current = defaults();
   Settings saved;
-  if (storage::load(KEY, &saved, sizeof(saved)) == ESP_OK && validate(saved).empty()) {
-    current = saved;
-    ESP_LOGI(TAG, "using saved settings");
-    return;
+  if (storage::load(KEY, &saved, sizeof(saved)) == ESP_OK) {
+    // Settings saved before the reminder had a floor could have it lower
+    // (0 used to turn it off). Raise it rather than reject the whole set.
+    if (saved.lowBatteryPercent < MIN_LOW_BATTERY_PERCENT) {
+      saved.lowBatteryPercent = MIN_LOW_BATTERY_PERCENT;
+    }
+    if (validate(saved).empty()) {
+      current = saved;
+      ESP_LOGI(TAG, "using saved settings");
+      return;
+    }
   }
 
   // Convert settings saved in the older layout, keeping the new fields at
@@ -126,7 +135,7 @@ void load() {
     converted.longitude = old.longitude;
     converted.binNightHour = old.binNightHour;
     converted.binNightLed = old.binNightLed;
-    converted.lowBatteryPercent = old.lowBatteryPercent;
+    converted.lowBatteryPercent = std::max<int>(old.lowBatteryPercent, MIN_LOW_BATTERY_PERCENT);
     converted.displayFlip = old.displayFlip;
     converted.displayDithering = old.displayDithering;
     converted.temperatureOffsetC = old.temperatureOffsetC;

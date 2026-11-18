@@ -17,7 +17,7 @@ struct Settings {
   double longitude;
   int binNightHour;
   bool binNightLed;
-  int lowBatteryPercent;
+  int lowBatteryPercent;  // MIN_LOW_BATTERY_PERCENT to MAX_LOW_BATTERY_PERCENT
   bool displayFlip;
   bool displayDithering;
   float temperatureOffsetC;
@@ -25,6 +25,12 @@ struct Settings {
   bool stayAwakeOnUsb;
   bool autoUpdate;
 };
+
+// The low battery reminder can't be set below this: the board switches itself
+// off at 3.4V (about 3%) to protect the cell, so a lower reminder would give
+// little or no warning first.
+constexpr int MIN_LOW_BATTERY_PERCENT = 10;
+constexpr int MAX_LOW_BATTERY_PERCENT = 50;
 
 namespace settings {
 
