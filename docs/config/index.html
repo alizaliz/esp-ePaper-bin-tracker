@@ -60,8 +60,29 @@
   fieldset { border: none; padding: 0; margin: 0; }
   fieldset:disabled { opacity: 0.55; }
   details summary { cursor: pointer; font-weight: 600; }
-  #advanced h3 { font-size: 14px; margin: 20px 0 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .card h3 { font-size: 14px; margin: 20px 0 8px; padding-top: 12px; border-top: 1px solid var(--border); }
   #advanced h3:first-of-type { border-top: none; padding-top: 0; margin-top: 12px; }
+
+  /* An "i" that shows a short explanation on hover or keyboard focus. */
+  .with-tip { display: flex; align-items: center; gap: 8px; }
+  .with-tip label { margin-bottom: 0; }
+  .check + .with-tip, .check + .row { margin-top: 12px; }
+  .with-tip + .battery { margin-top: 4px; }
+  .tip {
+    position: relative; flex: none; width: 18px; height: 18px; border-radius: 50%;
+    border: 1px solid var(--muted); color: var(--muted); font: 600 12px/16px Georgia, serif;
+    text-align: center; cursor: help; user-select: none;
+  }
+  .tip:hover, .tip:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
+  .tip::after {
+    content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px);
+    transform: translateX(-50%); width: max-content; max-width: 260px; padding: 8px 10px;
+    border-radius: 6px; background: var(--text); color: var(--card);
+    font: 13px/1.4 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; text-align: left;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .15s;
+    z-index: 10;
+  }
+  .tip:hover::after, .tip:focus-visible::after { opacity: 1; }
   #log {
     margin: 12px 0 0; max-height: 240px; overflow: auto; font: 12px/1.4 ui-monospace, Menlo, monospace;
     background: var(--input); border: 1px solid var(--border); border-radius: 6px; padding: 8px;
@@ -130,22 +151,6 @@
 
   <div id="message"></div>
 
-  <fieldset id="firmwareFields" disabled>
-    <div class="card">
-      <h2>Firmware</h2>
-      <div class="status">
-        <span id="firmwareVersion" style="flex:1">Version: unknown</span>
-        <button type="button" id="checkUpdate">Check for updates now</button>
-      </div>
-      <div id="updateStatus" class="update-status" role="status" aria-live="polite" hidden>
-        <span id="updateText"></span>
-        <div class="update-bar" id="updateBar" hidden><div id="updateFill"></div></div>
-      </div>
-      <label class="check"><input type="checkbox" id="autoUpdate"> Install updates automatically, overnight</label>
-      <div class="hint">Updates come from this project's GitHub releases. If new firmware fails, the board goes back to the previous version.</div>
-    </div>
-  </fieldset>
-
   <form id="form" autocomplete="off">
     <fieldset id="fields" disabled>
       <div class="card">
@@ -160,17 +165,15 @@
 
       <div class="card">
         <h2>Location</h2>
-        <button type="button" id="locate">Use this computer's location</button>
-        <div class="hint">
-          Sets the weather location and finds your street address. Your browser asks before sharing
-          its location, and the street address is looked up on
-          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
+        <div class="with-tip">
+          <button type="button" id="locate">Use this computer's location</button>
+          <span class="tip" tabindex="0" role="note"
+                data-tip="Fills in the weather location and finds your street address. Your browser asks first; the address comes from OpenStreetMap."
+                aria-label="Fills in the weather location and finds your street address. Your browser asks first; the address comes from OpenStreetMap.">i</span>
         </div>
         <div id="locateResult" class="update-status" role="status" aria-live="polite" hidden></div>
-      </div>
 
-      <div class="card">
-        <h2>Collection address</h2>
+        <h3>Collection address</h3>
         <label for="councilAddressId">Assessment number</label>
         <input type="text" id="councilAddressId" inputmode="numeric" maxlength="23">
         <div class="hint">
@@ -178,10 +181,8 @@
           <a href="https://www.aucklandcouncil.govt.nz/en/rubbish-recycling/rubbish-recycling-collections/rubbish-recycling-collection-days.html" target="_blank" rel="noopener">Council's collection day page</a>
           and copy the assessment number shown for your property. It's also the number at the end of the results page's address.
         </div>
-      </div>
 
-      <div class="card">
-        <h2>Weather</h2>
+        <h3>Weather</h3>
         <label class="check"><input type="checkbox" id="useOnlineWeather"> Show the midday weather forecast (otherwise the board's indoor temperature)</label>
         <div class="row">
           <div>
@@ -195,24 +196,44 @@
         </div>
       </div>
 
-      <div class="card" id="reminders">
-        <h2>Reminders</h2>
-        <label for="binNightHour">Show TONIGHT from</label>
-        <select id="binNightHour"></select>
-        <div class="hint">On the evening before a pickup.</div>
-        <label class="check"><input type="checkbox" id="binNightLed"> Blink the LED at the TONIGHT reminder</label>
-        <label for="lowBatteryPercent">Low battery reminder</label>
-        <div class="battery">
-          <input type="range" id="lowBatteryPercent" min="10" max="50" step="1">
-          <output id="lowBatteryValue" for="lowBatteryPercent"></output>
+      <fieldset id="firmwareFields" disabled>
+        <div class="card">
+          <h2>Firmware</h2>
+          <div class="status">
+            <span id="firmwareVersion" style="flex:1">Version: unknown</span>
+            <button type="button" id="checkUpdate">Check for updates now</button>
+          </div>
+          <div id="updateStatus" class="update-status" role="status" aria-live="polite" hidden>
+            <span id="updateText"></span>
+            <div class="update-bar" id="updateBar" hidden><div id="updateFill"></div></div>
+          </div>
+          <div class="with-tip">
+            <label class="check"><input type="checkbox" id="autoUpdate"> Install updates automatically, overnight</label>
+            <span class="tip" tabindex="0" role="note"
+                  data-tip="Updates come from GitHub releases. If one fails, the board goes back to the previous version."
+                  aria-label="Updates come from GitHub releases. If one fails, the board goes back to the previous version.">i</span>
+          </div>
         </div>
-        <div class="battery-scale"><span>10%</span><span>30%</span><span>50%</span></div>
-        <div class="hint" id="lowBatteryHint"></div>
-      </div>
+      </fieldset>
 
       <div class="card">
         <details id="advanced">
           <summary>Advanced</summary>
+
+          <h3>Reminders</h3>
+          <label for="binNightHour">Show TONIGHT from</label>
+          <select id="binNightHour"></select>
+          <div class="hint">On the evening before a pickup.</div>
+          <label class="check"><input type="checkbox" id="binNightLed"> Blink the LED at the TONIGHT reminder</label>
+          <div class="with-tip">
+            <label for="lowBatteryPercent">Low battery reminder</label>
+            <span class="tip" tabindex="0" role="note" id="lowBatteryTip">i</span>
+          </div>
+          <div class="battery">
+            <input type="range" id="lowBatteryPercent" min="10" max="50" step="1">
+            <output id="lowBatteryValue" for="lowBatteryPercent"></output>
+          </div>
+          <div class="battery-scale"><span>10%</span><span>30%</span><span>50%</span></div>
 
           <h3>Display</h3>
           <label class="check"><input type="checkbox" id="displayFlip"> USB-C end of the board at the top</label>
@@ -531,10 +552,10 @@ function updateBatterySlider() {
   box.style.setProperty("--level", levelColour(value));
   slider.style.setProperty("--pct", `${((value - min) / (max - min)) * 100}%`);
   $("lowBatteryValue").textContent = `${value}%`;
-  $("lowBatteryHint").textContent =
-    `The LED double-blinks every 10 minutes once the battery drops below ${value}%, `
-    + `and stops above ${value + 5}%. At 3.4V (about 3%) the board shows a "charge me" screen and `
-    + `switches itself off to protect the battery, so the reminder can't go below ${min}%.`;
+  const tip = `The LED blinks below ${value}% and stops above ${value + 5}%. At about 3% the board `
+    + "shows a charge screen and switches off to protect the battery.";
+  $("lowBatteryTip").dataset.tip = tip;
+  $("lowBatteryTip").setAttribute("aria-label", tip);
 }
 $("lowBatteryPercent").addEventListener("input", updateBatterySlider);
 updateBatterySlider();
