@@ -17,7 +17,7 @@ from pathlib import Path
 
 PREVIEW = Path("tools/preview/out")
 OUT = Path("docs/images")
-PREVIEWS = ["upcoming", "tonight", "today", "stale", "low_battery", "offline"]
+PREVIEWS = ["upcoming", "tonight", "today", "stale", "low_battery", "offline", "charge"]
 
 WIDTH = 960
 SCALE = 2                       # preview PNGs are rendered at 2x

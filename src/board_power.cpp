@@ -78,6 +78,11 @@ esp_err_t setEpdPower(bool on) {
   return setOutput(EXIO_EPD_POWER, on);
 }
 
+esp_err_t setBatteryHold(bool on) {
+  ESP_RETURN_ON_FALSE(expander != nullptr, ESP_ERR_INVALID_STATE, TAG, "init() not called");
+  return setOutput(EXIO_BATTERY_HOLD, on);
+}
+
 esp_err_t setLed(bool on) {
   ESP_RETURN_ON_FALSE(expander != nullptr, ESP_ERR_INVALID_STATE, TAG, "init() not called");
   // The LED is wired from 3.3V into the expander pin, so low turns it on.

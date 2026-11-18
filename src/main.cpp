@@ -61,6 +61,10 @@ static const int STALE_AFTER_S = 48 * 60 * 60;
 
 // While the battery is low, wake this often to blink the LED.
 static const int LOW_BATTERY_BLINK_INTERVAL_S = 10 * 60;
+// Below this, the board leaves a "charge me" screen up and switches itself
+// off, so the cell isn't run down far enough to harm it. A resting LiPo at
+// 3.4V has only a few percent left.
+static const int BATTERY_CUTOFF_MV = 3400;
 
 static const int WIFI_TIMEOUT_MS = 15000;
 static const int NTP_TIMEOUT_MS = 10000;
@@ -100,6 +104,13 @@ RTC_DATA_ATTR static float clock_drift = 0;
 RTC_DATA_ATTR static time_t last_clock_sync = 0;
 
 static esp_timer_handle_t awake_cap_timer = nullptr;
+
+// One display for the whole wake: it sets up the SPI bus and LVGL once, so a
+// wake can draw more than one screen.
+static DisplayManager& display(void) {
+  static DisplayManager manager;
+  return manager;
+}
 
 // Onboard sensor reading, shown when there's no forecast.
 struct IndoorReading {
@@ -353,13 +364,16 @@ static void enter_deep_sleep(void) {
 }
 
 // Reads the battery and updates battery_low, with 5% hysteresis so it doesn't
-// flip back and forth around the threshold. Returns the charge, or -1.
-static int check_battery(void) {
+// flip back and forth around the threshold. Returns the charge, or -1, and
+// sets millivolts (0 if the read failed).
+static int check_battery(int& millivolts) {
   float volts = 0;
+  millivolts = 0;
   if (battery::readVoltage(volts) != ESP_OK) {
     printf("Failed to read the battery voltage\n");
     return -1;
   }
+  millivolts = (int)lroundf(volts * 1000);
   const int percent = battery::percentFromVoltage(volts);
   if (percent < settings::get().lowBatteryPercent) {
     battery_low = true;
@@ -367,8 +381,34 @@ static int check_battery(void) {
     battery_low = false;
   }
   printf("Battery: %.2f V, %d %%%s\n", volts, percent, battery_low ? " (low)" : "");
-  if (clock_is_set()) stats::recordBattery(local_today(), (int)lroundf(volts * 1000), percent);
+  if (clock_is_set()) stats::recordBattery(local_today(), millivolts, percent);
   return percent;
+}
+
+// With the battery nearly flat, leaves a "charge me" screen up and switches
+// the board off completely by releasing the battery hold. Only the PWR button
+// or plugging in USB turns it back on. On USB power the board keeps running
+// after the release; then it re-latches the hold and carries on as normal.
+static void power_off_if_battery_flat(int millivolts) {
+  if (millivolts <= 0 || millivolts >= BATTERY_CUTOFF_MV) return;
+  printf("Battery at %.2f V, below %.2f V: showing the charge screen and switching off\n",
+         millivolts / 1000.0, BATTERY_CUTOFF_MV / 1000.0);
+  if (display().showChargeScreen() != ESP_OK) {
+    printf("Failed to update the display\n");
+  }
+  if (clock_is_set()) {
+    stats::endWake(local_today(), (uint32_t)(esp_timer_get_time() / 1000), true);
+  }
+  // Wait for PWR to be released: while it's held, it keeps the board on.
+  while (pwr_button_pressed()) {
+    vTaskDelay(pdMS_TO_TICKS(50));
+  }
+  fflush(stdout);
+  board_power::setBatteryHold(false);
+  vTaskDelay(pdMS_TO_TICKS(2000));
+  // Still running, so the board is on USB power.
+  board_power::setBatteryHold(true);
+  printf("Still powered, so USB must be connected: carrying on while it charges\n");
 }
 
 // One second of LED blinking: on/off steps with their lengths. The board only
@@ -530,7 +570,7 @@ static bool refresh_display(bool online, const weather::Midday& forecast,
     data.temperatureC = (int)lroundf(indoor.temperatureC);
   }
 
-  if (DisplayManager().show(data) != ESP_OK) {
+  if (display().show(data) != ESP_OK) {
     printf("Failed to update the display\n");
   }
   return data.isTonight;
@@ -704,7 +744,9 @@ extern "C" void app_main(void) {
   button.mode = GPIO_MODE_INPUT;  // the board has its own pull-up
   gpio_config(&button);
 
-  const int battery_pct = check_battery();
+  int battery_mv = 0;
+  const int battery_pct = check_battery(battery_mv);
+  power_off_if_battery_flat(battery_mv);
 
   // A timer wake before the refresh is due only blinks the low battery LED.
   // Any other wake (PWR button, power on, reset, flashing) always refreshes.

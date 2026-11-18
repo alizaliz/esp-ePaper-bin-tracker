@@ -34,3 +34,6 @@ struct BinScreenData {
 // Builds the main screen for a 200x200 display. Plain LVGL with no ESP-IDF
 // dependencies, so tools/preview can render it on a computer.
 lv_obj_t* createBinScreen(const BinScreenData& data);
+
+// The screen left up when the board switches itself off with a flat battery.
+lv_obj_t* createChargeScreen();

@@ -70,8 +70,7 @@ void writePng(const std::string& path, const std::vector<uint8_t>& frame, int sc
   fclose(f);
 }
 
-void render(lv_display_t* display, const BinScreenData& data, const std::string& path) {
-  lv_obj_t* screen = createBinScreen(data);
+void render(lv_display_t* display, lv_obj_t* screen, const std::string& path) {
   lv_screen_load(screen);
   lv_refr_now(display);
 
@@ -89,6 +88,10 @@ void render(lv_display_t* display, const BinScreenData& data, const std::string&
   mono::threshold(grey.data(), frame.data(), WIDTH, HEIGHT);
   writePng(path, frame, 2);
   printf("wrote %s\n", path.c_str());
+}
+
+void render(lv_display_t* display, const BinScreenData& data, const std::string& path) {
+  render(display, createBinScreen(data), path);
 }
 
 }  // namespace
@@ -166,6 +169,8 @@ int main(int argc, char** argv) {
   BinScreenData nothing = offline;  // no forecast and no sensor
   nothing.hasTemperature = false;
   render(display, nothing, out + "/no_temperature.png");
+
+  render(display, createChargeScreen(), out + "/charge.png");  // battery flat, switched off
   // Each of Binny's faces and the weather icons on its own, at the top left
   // of a blank screen, for the README diagram.
   const struct {

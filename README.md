@@ -103,6 +103,7 @@ While it's plugged into a computer, the board stays awake. Unplug it, or run it 
 | `no connection to "<SSID>"` | Check the Wi-Fi name and password, and that the network is 2.4GHz. |
 | `collection dates not found` or HTTP 406 | HTTP 406 means the Council website refused the connection: it blocks VPNs, so the board's network must connect directly. Otherwise, check the Assessment number. If it's right, the Council website layout may have changed (see Data sources under [How it works](#how-it-works)). |
 | Screen shows `--°` instead of the weather | Neither the forecast nor the onboard sensor could be read. |
+| Screen says "Battery flat, CHARGE" and the board won't respond | The battery fell below 3.4V, so the board switched itself off to protect it. Plug in USB-C: it starts straight away and refreshes while it charges. |
 
 </details>
 
@@ -119,10 +120,16 @@ While it's plugged into a computer, the board stays awake. Unplug it, or run it 
 | ![Schedule out of date](docs/images/screen_stale.png) | ![Low battery](docs/images/screen_low_battery.png) | ![Offline, low battery and out of date](docs/images/screen_offline.png) |
 | The dates may be old | The LED also blinks | Offline, low battery and out of date, with no forecast |
 
+| Battery flat |
+| :---: |
+| ![Battery flat: the board has switched itself off](docs/images/screen_charge.png) |
+| Below 3.4V, left up while the board is off |
+
 - **Speech bubble:** the next pickup day, e.g. `THU 8`, and icons for the bins going out on it. From 6pm the evening before, the bubble turns black and says `TONIGHT`; on the day it says `TODAY`.
 - **Binny:** the face below the bubble. On ordinary days it picks a face at random (happy, grinning, cheeky, blushing, whistling, melting, wearing specs or hot), never the same two days running. On bin night it's star-struck, partying or heart-eyed, and on collection day cool in sunglasses, laughing or wearing a halo, again picked at random. It's worried when offline or the dates may be old, and sleepy when the battery is low.
 - **Weather:** the forecast for midday, beside Binny: an icon (sun, sun and cloud, cloud, fog, drizzle, rain, snow or thunder) with the temperature written over its lower left. Until 2pm it's today's midday; after that, tomorrow's, so the `TONIGHT` reminder shows the weather for collection day.
 - **Status icons:** only when something needs attention, between Binny and the weather: a slashed Wi-Fi icon when this refresh couldn't get online, a battery when it's low, and a clock turning back when the dates may be old.
+- **Battery flat:** below 3.4V the board leaves a "Battery flat, CHARGE" screen up and switches itself off completely (see Battery and power below).
 - **Out of date:** when the pickup day has passed, the last successful fetch was over 48 hours ago, or the board lost power and couldn't get online, the bubble says "Last known" and `TODAY` and `TONIGHT` aren't shown.
 
 The forecast comes from Open-Meteo. If there's no forecast for the right day (the board has never been online, or the fetch failed), the screen shows the onboard sensor's temperature, labelled "inside".
@@ -178,7 +185,40 @@ Once a night, after fetching the schedule, the board checks this project's [late
 ### Battery life
 The board keeps a daily log of its battery level and activity for the last 60 days: battery voltage and percentage, number of wakes, time awake, and time spent connecting to Wi-Fi. The **Battery log** on the settings page shows it, estimates days remaining once there are three or more days of falling readings, and can download it as CSV. Time spent staying awake for a computer isn't counted.
 
-A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync under 0.1 s, weather about 1.3 s, schedule about 1.3 s and the screen about 1.4 s (each refresh logs this as `Timing (ms): ...`). **Measured with a USB power meter** (5V side, so it includes the board's charger and regulator): a refresh draws about 0.3W on average, peaking around 0.4W, which is roughly 0.14mAh from the battery. With one or two refreshes a day, that's about 0.15–0.3mAh a day. The current while asleep was below the meter's resolution, so battery life depends almost entirely on that unmeasured figure: about 50µA would give over a year on a 1000mAh battery, 1mA about six weeks. A week on battery, read from the log, or a meter in series with the battery gives the real figure.
+A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync under 0.1 s, weather about 1.3 s, schedule about 1.3 s and the screen about 1.4 s (each refresh logs this as `Timing (ms): ...`). **Measured with a USB power meter** (5V side, so it includes the board's charger and regulator): a refresh draws about 0.3W on average, peaking around 0.4W, which is roughly 0.14mAh from the battery. With one or two refreshes a day, that's about 0.15–0.3mAh a day.
+
+#### Measured on the Waveshare board
+
+![Daily battery level from the board's log, October to November 2026: flat at 100% while on USB, then two discharges from about 90% to empty in 4 and 5 days](docs/images/battery_log.svg)
+
+**A full charge of the 500mAh battery lasts 4 to 5 days.** That's an average draw of about 4mA. The refreshes account for under 0.3mAh a day, so over 99% of the battery goes on the time the board spends asleep, when it should draw well under 0.1mA.
+
+- **Most of it is the board's battery hold circuit.** On battery, the board stays on only while a transistor (T2) holds its battery switch closed, and T2 is driven through a 1kΩ resistor (R64). That costs about 2.5mA the whole time the board is on, asleep or not. Firmware can't avoid it: releasing the hold turns the board off, and only the PWR button or USB power can turn it back on.
+- **The audio circuits were powered all the time.** Their regulator is switched on by a pull-up, and the firmware never turned it off. v1.4.2 holds it off, but holding the pin low against its 10kΩ pull-up (R89) costs about 0.33mA itself, and the second discharge shows no clear improvement.
+- **The battery is run very low.** The last reading before it went flat was 3.03V, low enough to shorten a LiPo's life if it happens often.
+- **The log itself is now reliable.** Before v1.4.2, the board's sleep clock ran about 4.5 minutes a day fast, so the 00:05 refresh sometimes ran before midnight and logged a day twice. The firmware now measures that drift at each clock sync and corrects its sleep times, and since then each day appears once.
+
+| Discharge | Start | End | Days | Average draw |
+| --- | --- | --- | --- | --- |
+| 27 to 31 Oct | 92% (4.12V) | 10% (3.57V) | 4 | about 4mA |
+| 12 to 17 Nov (v1.4.2) | 88% (4.08V) | empty (3.03V) | 5 | about 4mA |
+
+Percentages are estimated from the battery voltage, so treat the draw as approximate. The data is in `docs/data/battery-log-waveshare.csv`, in the same format as the settings page's **Download CSV**; `python3 tools/docs/make_battery_chart.py` redraws the chart from it.
+
+#### Improvements for the next hardware
+
+The next build drops the all-in-one board for a small ESP32-C6 board, a display module and the battery, with nothing else. The aim is months on a charge instead of days.
+
+| Change | Why | Expected saving |
+| --- | --- | --- |
+| A board without a battery hold circuit, such as the Seeed XIAO ESP32C6 | Removes the 2.5mA through T2's base | About 2.5mA, most of the drain |
+| No audio codec, microphone, SD card, RTC chip or I/O expander | No extra regulators, pull-ups or chips to keep powered or held off | About 0.3–0.5mA |
+| Battery divider made from 1MΩ resistors (this board uses 200kΩ) | Leaks about 2µA instead of 10µA | About 8µA |
+| Display left powered and put in its own deep sleep, without a power switch | Its deep sleep draws about 1µA, and it saves an I/O pin | Small |
+| ~~Stop refreshing at about 3.4V and draw a "charge me" screen~~ Done in firmware, on this board too | The e-paper keeps the message with no power, and the cell isn't run down to 3V | Protects the battery |
+| Show low battery on screen only, instead of waking every 10 minutes to blink the LED | Each blink wake costs a little; the screen already shows a low battery icon | Small, but it's at the worst time |
+
+On paper, that's about 20–25µA asleep plus about 0.3mAh a day for refreshes: around 1mAh a day, or over a year on 500mAh. In practice the battery's own self-discharge is likely to be the limit.
 
 <details>
 <summary>Battery and power</summary>
@@ -186,6 +226,7 @@ A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync und
 - The battery voltage is read through the board's divider on GPIO0 and converted to a percentage with a lithium polymer discharge curve. With no battery connected, the charger's output reads as full.
 - Wi-Fi reconnects quickly: the board remembers the router it last used (saved in flash) and connects straight to it without scanning, asks for its previous IP address, and skips the address conflict check. It usually connects in about 0.7 seconds. If the remembered router doesn't answer within 6 seconds, for example after a router change, it forgets it and scans as normal.
 - Every wake keeps the board's battery power hold switched on. The panel is powered only while it's being redrawn.
+- **Battery cutoff:** if a wake reads the battery below 3.4V (a resting LiPo has only a few percent left there), the board draws the "Battery flat, CHARGE" screen and releases the battery hold, which switches it off completely. Only the battery voltage divider stays connected, about 10µA, so the cell can sit for months without being harmed. The PWR button or USB power turns it back on. If it's still running two seconds after releasing the hold, it must be on USB power, so it latches the hold again and carries on as normal while the battery charges.
 - The low battery LED uses light sleep between blinks, so the 10-minute reminder wakes cost little.
 - The board doesn't wait the random 0–5 seconds ESP-IDF normally adds before the first time request (meant to spread out many devices starting at once). Each sync logs how far the clock had drifted (`Clock corrected by ...`).
 - Deep sleep turns off USB, so a sleeping board can't be flashed or configured. It stays awake while a computer is connected; turn off **Stay awake on USB** to test real sleep while plugged in. Chargers and power banks don't count as a computer.
@@ -215,11 +256,11 @@ A full refresh spends roughly 5 seconds awake: Wi-Fi about 0.8 s, clock sync und
 | `components/fonts/` | Generated fonts: Gochi Hand |
 | `components/doodles/` | Generated drawings: the bubble, bins, weather, Binny and status icons |
 | `docs/config/` | The settings page (Web Serial), published with GitHub Pages |
-| `docs/images/` | README images |
+| `docs/images/`, `docs/data/` | README images, and the battery log behind the chart |
 | `tests/` | Council parser tests, fixture and the live page check |
 | `tools/fonts/`, `tools/doodles/` | Generators for the fonts and the drawings |
 | `tools/preview/` | Renders the screen to PNGs on a computer |
-| `tools/docs/` | Regenerates the README images |
+| `tools/docs/` | Regenerates the README images and the battery chart |
 | `.github/workflows/` | CI and releases |
 | `sdkconfig.defaults`, `partitions.csv` | ESP-IDF settings and the flash layout (two 4MB app slots for updates) |
 

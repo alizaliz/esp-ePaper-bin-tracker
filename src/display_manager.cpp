@@ -61,8 +61,15 @@ void DisplayManager::flush(lv_display_t* display, const lv_area_t* area, uint8_t
 
 esp_err_t DisplayManager::show(const BinScreenData& data) {
   ESP_RETURN_ON_ERROR(initLvgl(), TAG, "LVGL init failed");
+  return present(createBinScreen(data));
+}
 
-  lv_obj_t* screen = createBinScreen(data);
+esp_err_t DisplayManager::showChargeScreen() {
+  ESP_RETURN_ON_ERROR(initLvgl(), TAG, "LVGL init failed");
+  return present(createChargeScreen());
+}
+
+esp_err_t DisplayManager::present(lv_obj_t* screen) {
   lv_screen_load(screen);
   lv_refr_now(display_);
   lv_obj_delete(screen);

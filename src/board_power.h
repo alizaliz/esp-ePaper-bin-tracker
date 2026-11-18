@@ -14,6 +14,10 @@ esp_err_t init();
 // Switches the e-Paper panel's supply on or off.
 esp_err_t setEpdPower(bool on);
 
+// Drives the battery power hold. Releasing it switches the board off when
+// it's running from the battery; on USB power it keeps running.
+esp_err_t setBatteryHold(bool on);
+
 // Switches the green status LED on or off.
 esp_err_t setLed(bool on);
 

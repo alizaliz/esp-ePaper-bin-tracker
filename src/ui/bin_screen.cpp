@@ -189,12 +189,35 @@ void addWeather(lv_obj_t* screen, const BinScreenData& data, int status_icons) {
 
 }  // namespace
 
-lv_obj_t* createBinScreen(const BinScreenData& data) {
+namespace {
+
+lv_obj_t* createBlankScreen() {
   lv_obj_t* screen = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(screen, lv_color_white(), 0);
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
   lv_obj_set_style_text_color(screen, lv_color_black(), 0);
   lv_obj_set_scrollable(screen, false);
+  return screen;
+}
+
+}  // namespace
+
+lv_obj_t* createChargeScreen() {
+  lv_obj_t* screen = createBlankScreen();
+  addImage(screen, &doodle_bubble, BUBBLE_X, BUBBLE_Y);
+  const int below = placeText(addLabel(screen, "Battery flat", &font_hand_20), CENTRE_X, BUBBLE_Y + 9);
+  const int bottom = placeText(addLabel(screen, "CHARGE", &font_hand_42), CENTRE_X, below + 10);
+  addImage(screen, &doodle_status_battery, CENTRE_X - 11, bottom + 9);
+  addImage(screen, &doodle_face_sleepy, MASCOT_X, MASCOT_Y);
+  // Where the weather usually goes.
+  constexpr int centre = WEATHER_X + 42;
+  const int next = placeText(addLabel(screen, "Plug in", &font_hand_20), centre, WEATHER_Y + 14);
+  placeText(addLabel(screen, "USB-C", &font_hand_20), centre, next + 10);
+  return screen;
+}
+
+lv_obj_t* createBinScreen(const BinScreenData& data) {
+  lv_obj_t* screen = createBlankScreen();
 
   addBubble(screen, data);
   addImage(screen, mascotFace(data), MASCOT_X, MASCOT_Y);

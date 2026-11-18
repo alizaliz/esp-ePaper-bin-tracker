@@ -16,8 +16,10 @@
 class DisplayManager {
  public:
   esp_err_t show(const BinScreenData& data);
+  esp_err_t showChargeScreen();
 
  private:
+  esp_err_t present(lv_obj_t* screen);
   esp_err_t initLvgl();
   static void flush(lv_display_t* display, const lv_area_t* area, uint8_t* px_map);
 
