@@ -66,6 +66,6 @@
 
 // Below this charge (%), the green LED blinks for 10 seconds every 10 minutes
 // as a reminder to charge. It stops once the charge is back above
-// LOW_BATTERY_PERCENT + 5. 10 to 50; the board switches itself off at 3.4V
-// (about 3%) to protect the battery.
+// LOW_BATTERY_PERCENT + 5. 10 to 50; the board switches itself off at 3.5V
+// (about 5%) to protect the battery.
 #define LOW_BATTERY_PERCENT 10

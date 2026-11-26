@@ -552,7 +552,7 @@ function updateBatterySlider() {
   box.style.setProperty("--level", levelColour(value));
   slider.style.setProperty("--pct", `${((value - min) / (max - min)) * 100}%`);
   $("lowBatteryValue").textContent = `${value}%`;
-  const tip = `The LED blinks below ${value}% and stops above ${value + 5}%. At about 3% the board `
+  const tip = `The LED blinks below ${value}% and stops above ${value + 5}%. At about 5% the board `
     + "shows a charge screen and switches off to protect the battery.";
   $("lowBatteryTip").dataset.tip = tip;
   $("lowBatteryTip").setAttribute("aria-label", tip);

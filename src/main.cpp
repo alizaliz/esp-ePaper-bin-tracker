@@ -63,8 +63,14 @@ static const int STALE_AFTER_S = 48 * 60 * 60;
 static const int LOW_BATTERY_BLINK_INTERVAL_S = 10 * 60;
 // Below this, the board leaves a "charge me" screen up and switches itself
 // off, so the cell isn't run down far enough to harm it. A resting LiPo at
-// 3.4V has only a few percent left.
-static const int BATTERY_CUTOFF_MV = 3400;
+// 3.5V has about 5% left: enough margin that the Wi-Fi current of the next
+// refresh can't pull it down to the cell's own protection cutoff first.
+static const int BATTERY_CUTOFF_MV = 3500;
+// Below this (about 30%), wake at least this often just to read the battery,
+// so the cutoff is caught in time. Near empty a LiPo can fall from 3.6V to 3V
+// within a day, so the once-a-day refresh alone can miss it.
+static const int BATTERY_WATCH_MV = 3700;
+static const int BATTERY_WATCH_INTERVAL_S = 60 * 60;
 
 static const int WIFI_TIMEOUT_MS = 15000;
 static const int NTP_TIMEOUT_MS = 10000;
@@ -87,9 +93,11 @@ RTC_DATA_ATTR static Schedule last_schedule = {};
 static const char* SCHEDULE_KEY = "schedule_v1";
 
 // When the next full refresh (Wi-Fi, fetch, redraw) is due, as a time()
-// value. Low battery wakes in between only blink the LED.
+// value. Wakes in between only read the battery and blink the LED.
 RTC_DATA_ATTR static time_t next_refresh = 0;
 RTC_DATA_ATTR static bool battery_low = false;
+// The last battery reading, in millivolts (0 if unknown).
+RTC_DATA_ATTR static int last_battery_mv = 0;
 RTC_DATA_ATTR static int failed_refreshes = 0;
 // Set after a successful fetch. RTC memory is cleared by power loss, so this
 // is false until the first fetch after power returns.
@@ -345,6 +353,10 @@ static void enter_deep_sleep(void) {
   if (battery_low && sleep_s > LOW_BATTERY_BLINK_INTERVAL_S) {
     sleep_s = LOW_BATTERY_BLINK_INTERVAL_S;
   }
+  if (last_battery_mv > 0 && last_battery_mv < BATTERY_WATCH_MV &&
+      sleep_s > BATTERY_WATCH_INTERVAL_S) {
+    sleep_s = BATTERY_WATCH_INTERVAL_S;
+  }
   // A press of PWR wakes the board, which restarts the firmware and runs a
   // full refresh. Wait for release first so a held button doesn't wake it
   // straight back up.
@@ -374,6 +386,7 @@ static int check_battery(int& millivolts) {
     return -1;
   }
   millivolts = (int)lroundf(volts * 1000);
+  last_battery_mv = millivolts;
   const int percent = battery::percentFromVoltage(volts);
   if (percent < settings::get().lowBatteryPercent) {
     battery_low = true;

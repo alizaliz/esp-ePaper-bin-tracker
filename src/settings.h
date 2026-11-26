@@ -27,7 +27,7 @@ struct Settings {
 };
 
 // The low battery reminder can't be set below this: the board switches itself
-// off at 3.4V (about 3%) to protect the cell, so a lower reminder would give
+// off at 3.5V (about 5%) to protect the cell, so a lower reminder would give
 // little or no warning first.
 constexpr int MIN_LOW_BATTERY_PERCENT = 10;
 constexpr int MAX_LOW_BATTERY_PERCENT = 50;

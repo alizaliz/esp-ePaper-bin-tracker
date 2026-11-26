@@ -69,7 +69,7 @@ The page also sets the reminder time, the low battery level, the screen orientat
 | Latitude and longitude | central Auckland | Location for the weather |
 | Show TONIGHT from | 18:00 | Time on the evening before a pickup when the reminder appears |
 | Blink the LED at TONIGHT | on | |
-| Low battery reminder | 10% | The LED double-blinks below this charge. 10 to 50%: it can't go lower, because the board switches itself off at 3.4V (about 3%) to protect the battery. |
+| Low battery reminder | 10% | The LED double-blinks below this charge. 10 to 50%: it can't go lower, because the board switches itself off at 3.5V (about 5%) to protect the battery. |
 | USB-C end at the top | on | Rotates the screen 180° |
 | Dither greyscale images | off | Shades greys with dots instead of a hard threshold. The drawings are already black and white, so this only makes text grainier; best left off. |
 | Indoor sensor correction | 0°C | Added to the onboard sensor's temperature |
@@ -103,7 +103,7 @@ While it's plugged into a computer, the board stays awake. Unplug it, or run it 
 | `no connection to "<SSID>"` | Check the Wi-Fi name and password, and that the network is 2.4GHz. |
 | `collection dates not found` or HTTP 406 | HTTP 406 means the Council website refused the connection: it blocks VPNs, so the board's network must connect directly. Otherwise, check the Assessment number. If it's right, the Council website layout may have changed (see Data sources under [How it works](#how-it-works)). |
 | Screen shows `--°` instead of the weather | Neither the forecast nor the onboard sensor could be read. |
-| Screen says "Battery flat, CHARGE" and the board won't respond | The battery fell below 3.4V, so the board switched itself off to protect it. Plug in USB-C: it starts straight away and refreshes while it charges. |
+| Screen says "Battery flat, CHARGE" and the board won't respond | The battery fell below 3.5V, so the board switched itself off to protect it. Plug in USB-C: it starts straight away and refreshes while it charges. |
 
 </details>
 
@@ -123,13 +123,13 @@ While it's plugged into a computer, the board stays awake. Unplug it, or run it 
 | Battery flat |
 | :---: |
 | ![Battery flat: the board has switched itself off](docs/images/screen_charge.png) |
-| Below 3.4V, left up while the board is off |
+| Below 3.5V, left up while the board is off |
 
 - **Speech bubble:** the next pickup day, e.g. `THU 8`, and icons for the bins going out on it. From 6pm the evening before, the bubble turns black and says `TONIGHT`; on the day it says `TODAY`.
 - **Binny:** the face below the bubble. On ordinary days it picks a face at random (happy, grinning, cheeky, blushing, whistling, melting, wearing specs or hot), never the same two days running. On bin night it's star-struck, partying or heart-eyed, and on collection day cool in sunglasses, laughing or wearing a halo, again picked at random. It's worried when offline or the dates may be old, and sleepy when the battery is low.
 - **Weather:** the forecast for midday, beside Binny: an icon (sun, sun and cloud, cloud, fog, drizzle, rain, snow or thunder) with the temperature written over its lower left. Until 2pm it's today's midday; after that, tomorrow's, so the `TONIGHT` reminder shows the weather for collection day.
 - **Status icons:** only when something needs attention, between Binny and the weather: a slashed Wi-Fi icon when this refresh couldn't get online, a battery when it's low, and a clock turning back when the dates may be old.
-- **Battery flat:** below 3.4V the board leaves a "Battery flat, CHARGE" screen up and switches itself off completely (see Battery and power below).
+- **Battery flat:** below 3.5V the board leaves a "Battery flat, CHARGE" screen up and switches itself off completely (see Battery and power below).
 - **Out of date:** when the pickup day has passed, the last successful fetch was over 48 hours ago, or the board lost power and couldn't get online, the bubble says "Last known" and `TODAY` and `TONIGHT` aren't shown.
 
 The forecast comes from Open-Meteo. If there's no forecast for the right day (the board has never been online, or the fetch failed), the screen shows the onboard sensor's temperature, labelled "inside".
@@ -215,7 +215,7 @@ The next build drops the all-in-one board for a small ESP32-C6 board, a display 
 | No audio codec, microphone, SD card, RTC chip or I/O expander | No extra regulators, pull-ups or chips to keep powered or held off | About 0.3–0.5mA |
 | Battery divider made from 1MΩ resistors (this board uses 200kΩ) | Leaks about 2µA instead of 10µA | About 8µA |
 | Display left powered and put in its own deep sleep, without a power switch | Its deep sleep draws about 1µA, and it saves an I/O pin | Small |
-| ~~Stop refreshing at about 3.4V and draw a "charge me" screen~~ Done in firmware, on this board too | The e-paper keeps the message with no power, and the cell isn't run down to 3V | Protects the battery |
+| ~~Stop refreshing at about 3.5V and draw a "charge me" screen~~ Done in firmware, on this board too | The e-paper keeps the message with no power, and the cell isn't run down to 3V | Protects the battery |
 | Show low battery on screen only, instead of waking every 10 minutes to blink the LED | Each blink wake costs a little; the screen already shows a low battery icon | Small, but it's at the worst time |
 
 On paper, that's about 20–25µA asleep plus about 0.3mAh a day for refreshes: around 1mAh a day, or over a year on 500mAh. In practice the battery's own self-discharge is likely to be the limit.
@@ -226,7 +226,7 @@ On paper, that's about 20–25µA asleep plus about 0.3mAh a day for refreshes: 
 - The battery voltage is read through the board's divider on GPIO0 and converted to a percentage with a lithium polymer discharge curve. With no battery connected, the charger's output reads as full.
 - Wi-Fi reconnects quickly: the board remembers the router it last used (saved in flash) and connects straight to it without scanning, asks for its previous IP address, and skips the address conflict check. It usually connects in about 0.7 seconds. If the remembered router doesn't answer within 6 seconds, for example after a router change, it forgets it and scans as normal.
 - Every wake keeps the board's battery power hold switched on. The panel is powered only while it's being redrawn.
-- **Battery cutoff:** if a wake reads the battery below 3.4V (a resting LiPo has only a few percent left there), the board draws the "Battery flat, CHARGE" screen and releases the battery hold, which switches it off completely. Only the battery voltage divider stays connected, about 10µA, so the cell can sit for months without being harmed. The PWR button or USB power turns it back on. If it's still running two seconds after releasing the hold, it must be on USB power, so it latches the hold again and carries on as normal while the battery charges.
+- **Battery cutoff:** if a wake reads the battery below 3.5V (a resting LiPo has about 5% left there), the board draws the "Battery flat, CHARGE" screen and releases the battery hold, which switches it off completely. Only the battery voltage divider stays connected, about 10µA, so the cell can sit for months without being harmed. The PWR button or USB power turns it back on. If it's still running two seconds after releasing the hold, it must be on USB power, so it latches the hold again and carries on as normal while the battery charges. Below 3.7V (about 30%) the board also wakes every hour just to read the battery: near empty the cell can fall from 3.6V to 3V within a day, so the once-a-day refresh alone could miss the cutoff, which is what happened on 23 November.
 - The low battery LED uses light sleep between blinks, so the 10-minute reminder wakes cost little.
 - The board doesn't wait the random 0–5 seconds ESP-IDF normally adds before the first time request (meant to spread out many devices starting at once). Each sync logs how far the clock had drifted (`Clock corrected by ...`).
 - Deep sleep turns off USB, so a sleeping board can't be flashed or configured. It stays awake while a computer is connected; turn off **Stay awake on USB** to test real sleep while plugged in. Chargers and power banks don't count as a computer.
